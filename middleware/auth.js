@@ -10,6 +10,8 @@ import User from '../models/User.js'
 const protect = async (req, res, next) => {
   try {
     // 1. Try cookie first
+    console.log('Cookies:', req.cookies)
+console.log('Token:', req.cookies?.token)
     let token = req.cookies?.token
 
     // 2. Fallback to Authorization: Bearer <token>

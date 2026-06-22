@@ -15,7 +15,9 @@ export const getProfile = async (req, res) => {
     // Fetch all public snippets by this user
     const snippets = await Snippet.find({ author: user._id })
       .sort({ createdAt: -1 })
-      .select('title description language tags upvotes downvotes comments createdAt')
+      .select(
+        'title description language tags upvotes downvotes comments createdAt'
+      )
 
     return res.json({ user, snippets })
   } catch (err) {
