@@ -29,6 +29,7 @@
 ## ✨ Features
 
 ### 🔐 Authentication
+
 - **Local Auth** — Email + password registration and login with bcrypt hashing
 - **Google OAuth 2.0** — Sign in via Google using Passport.js strategy
 - **GitHub OAuth** — Sign in via GitHub using Passport.js strategy
@@ -37,16 +38,19 @@
 - **Set Password** — OAuth users can add a password to enable local login
 
 ### 📝 Snippets
+
 - Full CRUD for code snippets (create, read, delete)
 - Filter snippets by `language`, `tag`, or title `search`
 - Snippets sorted by net vote score (upvotes − downvotes)
 - Author-only delete protection
 
 ### 💬 Comments & Voting
+
 - Add comments to snippets, optionally tied to a specific **line number**
 - Toggle upvote / downvote on both snippets and individual comments (mutually exclusive)
 
 ### 🤖 AI Code Reviews
+
 - **Gemini AI** (primary) — Uses `@google/generative-ai` SDK; returns structured JSON reviews
 - **OpenAI GPT-4o-mini** (fallback) — Used when `GEMINI_API_KEY` is not set
 - Structured output: `summary`, `bugs[]`, `suggestions[]`, `complexityRating`
@@ -54,6 +58,7 @@
 - Graceful handling of rate limits (429) and unavailable models
 
 ### 🔌 Real-time (Socket.io)
+
 - Socket.io server co-hosted with Express
 - Emits connection/disconnection events (extensible for live comment broadcasting)
 
@@ -61,24 +66,24 @@
 
 ## 🛠 Tech Stack
 
-| Technology | Version | Purpose |
-|---|---|---|
-| **Node.js** | 18+ | JavaScript runtime |
-| **Express** | 5 | HTTP server framework |
-| **MongoDB + Mongoose** | 9 | Database and ODM |
-| **Socket.io** | 4 | Real-time WebSocket server |
-| **Passport.js** | 0.7 | OAuth middleware |
-| **passport-google-oauth20** | 2 | Google OAuth 2.0 strategy |
-| **passport-github2** | 0.1 | GitHub OAuth strategy |
-| **jsonwebtoken** | 9 | JWT signing and verification |
-| **bcryptjs** | 3 | Secure password hashing |
-| **cookie-parser** | 1.4 | HTTP-only cookie parsing |
-| **cors** | 2.8 | CORS policy enforcement |
-| **dotenv** | 17 | Environment variable loading |
-| **@google/generative-ai** | 0.24 | Gemini AI SDK |
-| **openai** | 6 | OpenAI SDK (GPT-4o-mini fallback) |
-| **nodemon** | 3 | Dev server auto-restart |
-| **prettier** | 3 | Code formatting |
+| Technology                  | Version | Purpose                           |
+| --------------------------- | ------- | --------------------------------- |
+| **Node.js**                 | 18+     | JavaScript runtime                |
+| **Express**                 | 5       | HTTP server framework             |
+| **MongoDB + Mongoose**      | 9       | Database and ODM                  |
+| **Socket.io**               | 4       | Real-time WebSocket server        |
+| **Passport.js**             | 0.7     | OAuth middleware                  |
+| **passport-google-oauth20** | 2       | Google OAuth 2.0 strategy         |
+| **passport-github2**        | 0.1     | GitHub OAuth strategy             |
+| **jsonwebtoken**            | 9       | JWT signing and verification      |
+| **bcryptjs**                | 3       | Secure password hashing           |
+| **cookie-parser**           | 1.4     | HTTP-only cookie parsing          |
+| **cors**                    | 2.8     | CORS policy enforcement           |
+| **dotenv**                  | 17      | Environment variable loading      |
+| **@google/generative-ai**   | 0.24    | Gemini AI SDK                     |
+| **openai**                  | 6       | OpenAI SDK (GPT-4o-mini fallback) |
+| **nodemon**                 | 3       | Dev server auto-restart           |
+| **prettier**                | 3       | Code formatting                   |
 
 ---
 
@@ -118,6 +123,7 @@ devcollab-server/
 ## 🚀 Getting Started
 
 ### Prerequisites
+
 - **Node.js** v18 or higher
 - **npm** v8 or higher
 - A **MongoDB** URI (local instance or [MongoDB Atlas](https://www.mongodb.com/atlas))
@@ -147,11 +153,11 @@ The server starts on **http://localhost:8000** by default.
 
 ### Available Scripts
 
-| Command | Description |
-|---|---|
-| `npm run dev` | Start with nodemon (auto-restart on file changes) |
-| `node index.js` | Start in production mode |
-| `npm run format` | Format all files with Prettier |
+| Command          | Description                                       |
+| ---------------- | ------------------------------------------------- |
+| `npm run dev`    | Start with nodemon (auto-restart on file changes) |
+| `node index.js`  | Start in production mode                          |
+| `npm run format` | Format all files with Prettier                    |
 
 ---
 
@@ -200,61 +206,63 @@ All endpoints are prefixed with `/api`. Authentication uses **HTTP-only JWT cook
 
 ### Auth — `/api/auth`
 
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `POST` | `/register` | ❌ | Register with email & password |
-| `POST` | `/login` | ❌ | Log in; sets `token` HTTP-only cookie |
-| `POST` | `/logout` | ❌ | Clears the auth cookie |
-| `GET` | `/me` | ✅ | Returns the currently authenticated user |
-| `POST` | `/complete-profile` | ✅ | Set username for OAuth users (required before app access) |
-| `PUT` | `/set-password` | ✅ | Add/change password for OAuth-registered users |
-| `GET` | `/google` | ❌ | Initiates Google OAuth flow |
-| `GET` | `/google/callback` | ❌ | Google OAuth redirect handler |
-| `GET` | `/github` | ❌ | Initiates GitHub OAuth flow |
-| `GET` | `/github/callback` | ❌ | GitHub OAuth redirect handler |
-| `GET` | `/oauth-error` | ❌ | OAuth failure redirect with error message |
+| Method | Endpoint            | Auth | Description                                               |
+| ------ | ------------------- | ---- | --------------------------------------------------------- |
+| `POST` | `/register`         | ❌   | Register with email & password                            |
+| `POST` | `/login`            | ❌   | Log in; sets `token` HTTP-only cookie                     |
+| `POST` | `/logout`           | ❌   | Clears the auth cookie                                    |
+| `GET`  | `/me`               | ✅   | Returns the currently authenticated user                  |
+| `POST` | `/complete-profile` | ✅   | Set username for OAuth users (required before app access) |
+| `PUT`  | `/set-password`     | ✅   | Add/change password for OAuth-registered users            |
+| `GET`  | `/google`           | ❌   | Initiates Google OAuth flow                               |
+| `GET`  | `/google/callback`  | ❌   | Google OAuth redirect handler                             |
+| `GET`  | `/github`           | ❌   | Initiates GitHub OAuth flow                               |
+| `GET`  | `/github/callback`  | ❌   | GitHub OAuth redirect handler                             |
+| `GET`  | `/oauth-error`      | ❌   | OAuth failure redirect with error message                 |
 
 ---
 
 ### Snippets — `/api/snippets`
 
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `GET` | `/` | Optional | List all snippets; supports `?language=`, `?tag=`, `?search=` |
-| `GET` | `/:id` | Optional | Get a single snippet with comments and AI review |
-| `POST` | `/` | ✅ | Create a new snippet |
-| `DELETE` | `/:id` | ✅ Author only | Delete a snippet |
-| `POST` | `/:id/comments` | ✅ | Add a comment (`content`, optional `lineNumber`) |
-| `PATCH` | `/:id/comments/:commentId/upvote` | ✅ | Toggle upvote on a comment |
-| `PATCH` | `/:id/comments/:commentId/downvote` | ✅ | Toggle downvote on a comment |
-| `PATCH` | `/:id/upvote` | ✅ | Toggle upvote on a snippet |
-| `PATCH` | `/:id/downvote` | ✅ | Toggle downvote on a snippet |
-| `POST` | `/:id/ai-review` | ✅ | Generate or retrieve cached AI code review |
+| Method   | Endpoint                            | Auth           | Description                                                   |
+| -------- | ----------------------------------- | -------------- | ------------------------------------------------------------- |
+| `GET`    | `/`                                 | Optional       | List all snippets; supports `?language=`, `?tag=`, `?search=` |
+| `GET`    | `/:id`                              | Optional       | Get a single snippet with comments and AI review              |
+| `POST`   | `/`                                 | ✅             | Create a new snippet                                          |
+| `DELETE` | `/:id`                              | ✅ Author only | Delete a snippet                                              |
+| `POST`   | `/:id/comments`                     | ✅             | Add a comment (`content`, optional `lineNumber`)              |
+| `PATCH`  | `/:id/comments/:commentId/upvote`   | ✅             | Toggle upvote on a comment                                    |
+| `PATCH`  | `/:id/comments/:commentId/downvote` | ✅             | Toggle downvote on a comment                                  |
+| `PATCH`  | `/:id/upvote`                       | ✅             | Toggle upvote on a snippet                                    |
+| `PATCH`  | `/:id/downvote`                     | ✅             | Toggle downvote on a snippet                                  |
+| `POST`   | `/:id/ai-review`                    | ✅             | Generate or retrieve cached AI code review                    |
 
 **AI Review query params:**
+
 - `?force=true` — Bypass cache and regenerate the review
 
 ---
 
 ### Users — `/api/users`
 
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `GET` | `/:id` | ❌ | Get a user's public profile |
+| Method | Endpoint | Auth | Description                 |
+| ------ | -------- | ---- | --------------------------- |
+| `GET`  | `/:id`   | ❌   | Get a user's public profile |
 
 ---
 
 ### Health Check
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/health` | Returns `{ status: "ok", timestamp }` |
+| Method | Endpoint      | Description                           |
+| ------ | ------------- | ------------------------------------- |
+| `GET`  | `/api/health` | Returns `{ status: "ok", timestamp }` |
 
 ---
 
 ## 🗃️ Database Schema
 
 ### User
+
 ```js
 {
   username:          String,   // unique, sparse (null until OAuth user completes profile)
@@ -271,6 +279,7 @@ All endpoints are prefixed with `/api`. Authentication uses **HTTP-only JWT cook
 ```
 
 ### Snippet
+
 ```js
 {
   title:       String,   // required
@@ -286,7 +295,8 @@ All endpoints are prefixed with `/api`. Authentication uses **HTTP-only JWT cook
 }
 ```
 
-### Comment *(embedded in Snippet)*
+### Comment _(embedded in Snippet)_
+
 ```js
 {
   user:       ObjectId, // ref: User
@@ -299,6 +309,7 @@ All endpoints are prefixed with `/api`. Authentication uses **HTTP-only JWT cook
 ```
 
 ### AiReview
+
 ```js
 {
   user:             ObjectId, // ref: User
@@ -315,14 +326,14 @@ All endpoints are prefixed with `/api`. Authentication uses **HTTP-only JWT cook
 
 ## 🔒 Security
 
-| Measure | Detail |
-|---|---|
-| **HTTP-only JWT cookies** | Auth tokens are never exposed to JavaScript — prevents XSS token theft |
-| **Bcrypt (salt=10)** | All passwords are hashed before storage |
-| **CORS whitelist** | Only the `FRONTEND_URL` origin is permitted with credentials |
-| **Ownership checks** | Delete operations confirm the requester is the author |
+| Measure                      | Detail                                                                       |
+| ---------------------------- | ---------------------------------------------------------------------------- |
+| **HTTP-only JWT cookies**    | Auth tokens are never exposed to JavaScript — prevents XSS token theft       |
+| **Bcrypt (salt=10)**         | All passwords are hashed before storage                                      |
+| **CORS whitelist**           | Only the `FRONTEND_URL` origin is permitted with credentials                 |
+| **Ownership checks**         | Delete operations confirm the requester is the author                        |
 | **Optional auth middleware** | `optionalProtect` lets public routes work without leaking user-specific data |
-| **OAuth error handling** | Failed OAuth redirects carry a human-readable error message |
+| **OAuth error handling**     | Failed OAuth redirects carry a human-readable error message                  |
 
 ---
 

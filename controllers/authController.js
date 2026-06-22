@@ -156,8 +156,10 @@ export const oauthCallback = (req, res) => {
   const user = req.user
   const token = generateToken(user._id)
   // Don't set cookie — pass token in redirect URL
-  const frontendURL = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/+$/, '')
-  
+  const frontendURL = (
+    process.env.FRONTEND_URL || 'http://localhost:5173'
+  ).replace(/\/+$/, '')
+
   if (!user.isProfileComplete) {
     return res.redirect(`${frontendURL}/complete-profile?token=${token}`)
   }

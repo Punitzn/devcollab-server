@@ -1,5 +1,18 @@
 import Snippet from '../models/Snippet.js'
 import AiReview from '../models/AiReview.js'
+import {
+  TTL,
+  listKey,
+  detailKey,
+  cacheGet,
+  cacheSet,
+  cacheDel,
+  cacheDelPattern,
+} from '../utils/cache.js'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CREATE
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const createSnippet = async (req, res) => {
   try {
@@ -12,49 +25,83 @@ export const createSnippet = async (req, res) => {
       tags,
       author: req.user._id,
     })
+
+    // A new snippet invalidates every list page (sort order changes) and the author's profile cache pages
+    await Promise.all([
+      cacheDelPattern('snip:list:*'),
+      cacheDelPattern(`user:profile:${req.user._id}:*`),
+    ])
+
     res.status(201).json(snippet)
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LIST  (GET /api/snippets)
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const getSnippets = async (req, res) => {
   try {
     const { language, tag, search } = req.query
 
-    // ─── Pagination ───────────────────────────────────────────────────────────────
-    const page  = Math.max(1, parseInt(req.query.page)  || 1)
+    // ─── Pagination ───────────────────────────────────────────────────────────
+    const page = Math.max(1, parseInt(req.query.page) || 1)
     const limit = Math.min(50, parseInt(req.query.limit) || 20)
-    const skip  = (page - 1) * limit
+    const skip = (page - 1) * limit
 
-    // ─── Filter ───────────────────────────────────────────────────────────────────
-    const filter = {}
-    if (language) filter.language = language
-    if (tag)      filter.tags = tag
-    if (search)   filter.title = { $regex: search, $options: 'i' }
+    // ─── Redis cache (user-agnostic — AI reviews are attached separately) ─────
+    const key = listKey({ page, limit, language, tag, search })
+    const cached = await cacheGet(key)
 
-    // Run the paginated query and total count in parallel
-    const [snippets, total] = await Promise.all([
-      Snippet.find(filter)
-        .populate('author', 'username avatar reputation')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),                 // plain JS objects — 2-5x faster than Mongoose docs
-      Snippet.countDocuments(filter),
-    ])
+    let basePayload // { snippets, page, limit, total, totalPages }
 
-    // Sort by net votes within this page (only up to 20 items — negligible cost)
-    snippets.sort((a, b) => {
-      const scoreA = (a.upvotes?.length || 0) - (a.downvotes?.length || 0)
-      const scoreB = (b.upvotes?.length || 0) - (b.downvotes?.length || 0)
-      return scoreB - scoreA
-    })
+    if (cached) {
+      basePayload = cached
+    } else {
+      // ─── DB fetch ────────────────────────────────────────────────────────────
+      const filter = {}
+      if (language) filter.language = language
+      if (tag) filter.tags = tag
+      if (search) filter.title = { $regex: search, $options: 'i' }
 
-    // Attach cached AI review for logged-in user (one query for all snippets)
+      const [snippets, total] = await Promise.all([
+        Snippet.find(filter)
+          .populate('author', 'username avatar reputation')
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        Snippet.countDocuments(filter),
+      ])
+
+      // Sort by net votes within this page (≤20 items — negligible)
+      snippets.sort((a, b) => {
+        const scoreA = (a.upvotes?.length || 0) - (a.downvotes?.length || 0)
+        const scoreB = (b.upvotes?.length || 0) - (b.downvotes?.length || 0)
+        return scoreB - scoreA
+      })
+
+      basePayload = {
+        snippets,
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      }
+
+      // Cache the base payload (no user-specific AI review data)
+      await cacheSet(key, basePayload, TTL.SNIPPET_LIST)
+    }
+
+    // ─── Layer in AI reviews for logged-in user (indexed, fast) ───────────────
+    // Deep-clone so we don't mutate the in-memory cached object
+    const snippets = basePayload.snippets.map((s) => ({ ...s }))
+
     if (req.user && snippets.length > 0) {
       const aiReviews = await AiReview.find({
-        user:    req.user._id,
+        user: req.user._id,
         snippet: { $in: snippets.map((s) => s._id) },
       }).lean()
       const reviewMap = new Map(aiReviews.map((r) => [r.snippet.toString(), r]))
@@ -63,37 +110,60 @@ export const getSnippets = async (req, res) => {
       })
     }
 
-    res.json({ snippets, page, limit, total, totalPages: Math.ceil(total / limit) })
+    res.json({ ...basePayload, snippets })
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DETAIL  (GET /api/snippets/:id)
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const getSnippetById = async (req, res) => {
   try {
-    // .lean() + manual populate kept separate because we need the full doc
-    const snippet = await Snippet.findById(req.params.id)
-      .populate('author', 'username avatar reputation')
-      .populate('comments.user', 'username avatar')
-      .lean()
+    const key = detailKey(req.params.id)
+    const cached = await cacheGet(key)
+
+    let snippet
+
+    if (cached) {
+      snippet = cached
+    } else {
+      snippet = await Snippet.findById(req.params.id)
+        .populate('author', 'username avatar reputation')
+        .populate('comments.user', 'username avatar')
+        .lean()
+
+      if (!snippet)
+        return res.status(404).json({ message: 'Snippet not found' })
+
+      await cacheSet(key, snippet, TTL.SNIPPET_DETAIL)
+    }
 
     if (!snippet) return res.status(404).json({ message: 'Snippet not found' })
 
+    // AI review is user-specific — always fetch fresh, never cache it on the doc
+    const result = { ...snippet }
     if (req.user) {
-      const aiReview = await AiReview.findOne({
-        user:    req.user._id,
-        snippet: snippet._id,
-      }).lean()
-      snippet.aiReview = aiReview || null
+      result.aiReview =
+        (await AiReview.findOne({
+          user: req.user._id,
+          snippet: snippet._id,
+        }).lean()) || null
     } else {
-      delete snippet.aiReview
+      delete result.aiReview
     }
 
-    res.json(snippet)
+    res.json(result)
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const deleteSnippet = async (req, res) => {
   try {
@@ -104,11 +174,23 @@ export const deleteSnippet = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized' })
 
     await snippet.deleteOne()
+
+    // Invalidate detail + every list page + author's profile cache pages
+    await Promise.all([
+      cacheDel(detailKey(req.params.id)),
+      cacheDelPattern('snip:list:*'),
+      cacheDelPattern(`user:profile:${req.user._id}:*`),
+    ])
+
     res.json({ message: 'Snippet deleted' })
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMMENTS
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const addComment = async (req, res) => {
   try {
@@ -122,6 +204,12 @@ export const addComment = async (req, res) => {
       lineNumber: lineNumber || null,
     })
     await snippet.save()
+
+    // New comment changes the detail view and the snippet author's profile cache pages
+    await Promise.all([
+      cacheDel(detailKey(req.params.id)),
+      cacheDelPattern(`user:profile:${snippet.author}:*`),
+    ])
 
     const updated = await Snippet.findById(req.params.id).populate(
       'comments.user',
@@ -142,16 +230,18 @@ export const upvoteComment = async (req, res) => {
     if (!comment) return res.status(404).json({ message: 'Comment not found' })
 
     const userId = req.user._id
-    const alreadyUpvoted = comment.upvotes.includes(userId)
-
-    if (alreadyUpvoted) {
+    if (comment.upvotes.includes(userId)) {
       comment.upvotes.pull(userId)
     } else {
       comment.upvotes.push(userId)
-      comment.downvotes.pull(userId) // remove downvote if switching
+      comment.downvotes.pull(userId)
     }
 
     await snippet.save()
+    await Promise.all([
+      cacheDel(detailKey(req.params.id)),
+      cacheDelPattern(`user:profile:${snippet.author}:*`),
+    ])
     res.json(comment)
   } catch (err) {
     res.status(500).json({ message: err.message })
@@ -167,21 +257,27 @@ export const downvoteComment = async (req, res) => {
     if (!comment) return res.status(404).json({ message: 'Comment not found' })
 
     const userId = req.user._id
-    const alreadyDownvoted = comment.downvotes.includes(userId)
-
-    if (alreadyDownvoted) {
+    if (comment.downvotes.includes(userId)) {
       comment.downvotes.pull(userId)
     } else {
       comment.downvotes.push(userId)
-      comment.upvotes.pull(userId) // remove upvote if switching
+      comment.upvotes.pull(userId)
     }
 
     await snippet.save()
+    await Promise.all([
+      cacheDel(detailKey(req.params.id)),
+      cacheDelPattern(`user:profile:${snippet.author}:*`),
+    ])
     res.json(comment)
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SNIPPET VOTING
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * PATCH /api/snippets/:id/upvote
@@ -193,21 +289,23 @@ export const upvoteSnippet = async (req, res) => {
     if (!snippet) return res.status(404).json({ message: 'Snippet not found' })
 
     const userId = req.user._id
-    const alreadyUpvoted = snippet.upvotes.some((id) => id.equals(userId))
-
-    if (alreadyUpvoted) {
-      // Toggle off
+    if (snippet.upvotes.some((id) => id.equals(userId))) {
       snippet.upvotes.pull(userId)
     } else {
       snippet.upvotes.push(userId)
-      snippet.downvotes.pull(userId) // remove downvote if switching to upvote
+      snippet.downvotes.pull(userId)
     }
 
     await snippet.save()
-    res.json({
-      upvotes: snippet.upvotes,
-      downvotes: snippet.downvotes,
-    })
+
+    // Vote changes the detail doc, may re-order lists, and changes author profile info (votes)
+    await Promise.all([
+      cacheDel(detailKey(req.params.id)),
+      cacheDelPattern('snip:list:*'),
+      cacheDelPattern(`user:profile:${snippet.author}:*`),
+    ])
+
+    res.json({ upvotes: snippet.upvotes, downvotes: snippet.downvotes })
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
@@ -223,21 +321,22 @@ export const downvoteSnippet = async (req, res) => {
     if (!snippet) return res.status(404).json({ message: 'Snippet not found' })
 
     const userId = req.user._id
-    const alreadyDownvoted = snippet.downvotes.some((id) => id.equals(userId))
-
-    if (alreadyDownvoted) {
-      // Toggle off
+    if (snippet.downvotes.some((id) => id.equals(userId))) {
       snippet.downvotes.pull(userId)
     } else {
       snippet.downvotes.push(userId)
-      snippet.upvotes.pull(userId) // remove upvote if switching to downvote
+      snippet.upvotes.pull(userId)
     }
 
     await snippet.save()
-    res.json({
-      upvotes: snippet.upvotes,
-      downvotes: snippet.downvotes,
-    })
+
+    await Promise.all([
+      cacheDel(detailKey(req.params.id)),
+      cacheDelPattern('snip:list:*'),
+      cacheDelPattern(`user:profile:${snippet.author}:*`),
+    ])
+
+    res.json({ upvotes: snippet.upvotes, downvotes: snippet.downvotes })
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
