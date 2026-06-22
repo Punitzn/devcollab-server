@@ -3,6 +3,11 @@ import { Strategy as GoogleStrategy } from 'passport-google-oauth20'
 import { Strategy as GitHubStrategy } from 'passport-github2'
 import User from '../models/User.js'
 
+const trimTrailingSlash = (value) => value?.replace(/\/+$/, '')
+const serverURL = trimTrailingSlash(
+  process.env.SERVER_URL || 'http://localhost:8000'
+)
+
 /**
  * Google OAuth Strategy
  * Triggered when user visits /api/auth/google/callback
@@ -13,7 +18,7 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: `${process.env.SERVER_URL}/api/auth/google/callback`,
+      callbackURL: `${serverURL}/api/auth/google/callback`,
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
@@ -67,7 +72,7 @@ passport.use(
     {
       clientID: process.env.GITHUB_CLIENT_ID,
       clientSecret: process.env.GITHUB_CLIENT_SECRET,
-      callbackURL: `${process.env.SERVER_URL}/api/auth/github/callback`,
+      callbackURL: `${serverURL}/api/auth/github/callback`,
       scope: ['user:email'], // Request email access
     },
     async (accessToken, refreshToken, profile, done) => {

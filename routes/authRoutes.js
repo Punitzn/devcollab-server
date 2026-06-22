@@ -14,6 +14,21 @@ import protect from '../middleware/auth.js'
 
 const router = express.Router()
 
+const handleOAuthFailure = (provider) => (req, res, next) => {
+  passport.authenticate(provider, { session: false }, (err, user, info) => {
+    if (err || !user) {
+      const message =
+        err?.message || info?.message || `${provider} authentication failed`
+      return res.redirect(
+        `/api/auth/oauth-error?message=${encodeURIComponent(message)}`
+      )
+    }
+
+    req.user = user
+    return next()
+  })(req, res, next)
+}
+
 // ─── Local Auth ──────────────────────────────────────────────────────────────
 router.post('/register', register)
 router.post('/login', login)
@@ -35,14 +50,7 @@ router.get(
 )
 
 // Step 2: Google redirects back here with code
-router.get(
-  '/google/callback',
-  passport.authenticate('google', {
-    session: false,
-    failureRedirect: '/api/auth/oauth-error',
-  }),
-  oauthCallback
-)
+router.get('/google/callback', handleOAuthFailure('google'), oauthCallback)
 
 // ─── GitHub OAuth ─────────────────────────────────────────────────────────────
 // Step 1: redirect user to GitHub's consent screen
@@ -55,14 +63,7 @@ router.get(
 )
 
 // Step 2: GitHub redirects back here
-router.get(
-  '/github/callback',
-  passport.authenticate('github', {
-    session: false,
-    failureRedirect: '/api/auth/oauth-error',
-  }),
-  oauthCallback
-)
+router.get('/github/callback', handleOAuthFailure('github'), oauthCallback)
 
 // ─── OAuth Error ──────────────────────────────────────────────────────────────
 router.get('/oauth-error', oauthError)

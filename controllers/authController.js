@@ -16,10 +16,11 @@ const generateToken = (id) =>
  * sameSite   → CSRF protection
  */
 const setTokenCookie = (res, token) => {
+  const isProduction = process.env.NODE_ENV === 'production'
   res.cookie('token', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
   })
 }
@@ -89,7 +90,9 @@ export const login = async (req, res) => {
     const { email, password } = req.body
 
     if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required' })
+      return res
+        .status(400)
+        .json({ message: 'Email and password are required' })
     }
 
     const user = await User.findOne({ email })
@@ -154,7 +157,9 @@ export const oauthCallback = (req, res) => {
   const token = generateToken(user._id)
   setTokenCookie(res, token)
 
-  const frontendURL = process.env.FRONTEND_URL || 'http://localhost:5173'
+  const frontendURL = (
+    process.env.FRONTEND_URL || 'http://localhost:5173'
+  ).replace(/\/+$/, '')
 
   // If user hasn't set a username yet, send them to the complete-profile page
   if (!user.isProfileComplete) {
@@ -169,9 +174,13 @@ export const oauthCallback = (req, res) => {
  * Redirected here when OAuth fails (e.g. GitHub private email).
  */
 export const oauthError = (req, res) => {
-  const frontendURL = process.env.FRONTEND_URL || 'http://localhost:5173'
+  const frontendURL = (
+    process.env.FRONTEND_URL || 'http://localhost:5173'
+  ).replace(/\/+$/, '')
   const message = req.query.message || 'OAuth authentication failed'
-  return res.redirect(`${frontendURL}/login?error=${encodeURIComponent(message)}`)
+  return res.redirect(
+    `${frontendURL}/login?error=${encodeURIComponent(message)}`
+  )
 }
 
 // ─── OAuth Profile Completion ─────────────────────────────────────────────────
@@ -201,7 +210,9 @@ export const completeProfile = async (req, res) => {
     // Optionally set password for future email+password login
     if (password) {
       if (password.length < 6) {
-        return res.status(400).json({ message: 'Password must be at least 6 characters' })
+        return res
+          .status(400)
+          .json({ message: 'Password must be at least 6 characters' })
       }
       req.user.password = password // pre-save hook will hash it
     }
@@ -225,7 +236,9 @@ export const setPassword = async (req, res) => {
     const { currentPassword, newPassword } = req.body
 
     if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ message: 'New password must be at least 6 characters' })
+      return res
+        .status(400)
+        .json({ message: 'New password must be at least 6 characters' })
     }
 
     // If user already has a password, verify the current one
@@ -235,7 +248,9 @@ export const setPassword = async (req, res) => {
       }
       const isMatch = await req.user.matchPassword(currentPassword)
       if (!isMatch) {
-        return res.status(401).json({ message: 'Current password is incorrect' })
+        return res
+          .status(401)
+          .json({ message: 'Current password is incorrect' })
       }
     }
 

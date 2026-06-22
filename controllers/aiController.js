@@ -3,6 +3,9 @@ import OpenAI from 'openai'
 import Snippet from '../models/Snippet.js'
 import AiReview from '../models/AiReview.js'
 
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash'
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini'
+
 /**
  * POST /api/snippets/:id/ai-review
  * Sends the snippet code to Gemini (or GPT-4) and gets back a structured code review.
@@ -34,9 +37,10 @@ export const generateAiReview = async (req, res) => {
     const useOpenAI = !useGemini && !!process.env.OPENAI_API_KEY
 
     if (!useGemini && !useOpenAI) {
-      return res
-        .status(503)
-        .json({ message: 'AI review is not configured (missing GEMINI_API_KEY or OPENAI_API_KEY)' })
+      return res.status(503).json({
+        message:
+          'AI review is not configured (missing GEMINI_API_KEY or OPENAI_API_KEY)',
+      })
     }
 
     // Structured prompt — forces the AI to return valid JSON
@@ -63,24 +67,30 @@ ${snippet.code}
 
       try {
         const model = genAI.getGenerativeModel({
-          model: 'gemini-flash-latest',
+          model: GEMINI_MODEL,
           generationConfig: { responseMimeType: 'application/json' },
         })
         const result = await model.generateContent(prompt)
         const response = await result.response
         raw = response.text().trim()
       } catch (geminiError) {
-        if (geminiError.status === 429 || (geminiError.message && geminiError.message.includes('429'))) {
-          console.warn('Gemini 2.0 Flash rate limited.');
-          return res.status(429).json({ message: 'AI service is currently rate-limited. Please try again in a few moments.' });
+        if (
+          geminiError.status === 429 ||
+          (geminiError.message && geminiError.message.includes('429'))
+        ) {
+          console.warn('Gemini 2.0 Flash rate limited.')
+          return res.status(429).json({
+            message:
+              'AI service is currently rate-limited. Please try again in a few moments.',
+          })
         } else {
-          throw geminiError;
+          throw geminiError
         }
       }
     } else {
       const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
       const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: OPENAI_MODEL,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
@@ -120,7 +130,9 @@ ${snippet.code}
 
     aiReview.summary = review.summary || ''
     aiReview.bugs = Array.isArray(review.bugs) ? review.bugs : []
-    aiReview.suggestions = Array.isArray(review.suggestions) ? review.suggestions : []
+    aiReview.suggestions = Array.isArray(review.suggestions)
+      ? review.suggestions
+      : []
     aiReview.complexityRating = review.complexityRating || 'N/A'
     aiReview.generatedAt = new Date()
 
@@ -129,6 +141,16 @@ ${snippet.code}
     return res.json({ aiReview, cached: false })
   } catch (err) {
     console.error('AI review error:', err)
+    const status = err.status || err.statusCode
+    if (
+      status === 400 &&
+      /model|not found|not supported/i.test(err.message || '')
+    ) {
+      return res.status(503).json({
+        message:
+          'AI review model is not available. Set GEMINI_MODEL or OPENAI_MODEL to a model enabled for your API key.',
+      })
+    }
     return res.status(500).json({
       message: err.message || 'Failed to generate AI review',
     })

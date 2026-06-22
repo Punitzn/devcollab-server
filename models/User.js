@@ -19,7 +19,7 @@ const userSchema = new mongoose.Schema(
     // Password is optional — OAuth users may not have one initially
     password: {
       type: String,
-      default: true,
+      default: null,
     },
     avatar: {
       type: String,
