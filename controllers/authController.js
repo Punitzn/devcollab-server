@@ -74,7 +74,7 @@ export const register = async (req, res) => {
     const token = generateToken(user._id)
     setTokenCookie(res, token)
 
-    return res.status(201).json({ user: formatUser(user) })
+    return res.status(201).json({ user: formatUser(user), token })
   } catch (err) {
     console.error('Register error:', err)
     return res.status(500).json({ message: err.message })
@@ -115,7 +115,7 @@ export const login = async (req, res) => {
     const token = generateToken(user._id)
     setTokenCookie(res, token)
 
-    return res.json({ user: formatUser(user) })
+    return res.json({ user: formatUser(user), token })
   } catch (err) {
     console.error('Login error:', err)
     return res.status(500).json({ message: err.message })
@@ -155,18 +155,13 @@ export const getMe = async (req, res) => {
 export const oauthCallback = (req, res) => {
   const user = req.user
   const token = generateToken(user._id)
-  setTokenCookie(res, token)
-
-  const frontendURL = (
-    process.env.FRONTEND_URL || 'http://localhost:5173'
-  ).replace(/\/+$/, '')
-
-  // If user hasn't set a username yet, send them to the complete-profile page
+  // Don't set cookie — pass token in redirect URL
+  const frontendURL = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/+$/, '')
+  
   if (!user.isProfileComplete) {
-    return res.redirect(`${frontendURL}/complete-profile`)
+    return res.redirect(`${frontendURL}/complete-profile?token=${token}`)
   }
-
-  return res.redirect(`${frontendURL}/`)
+  return res.redirect(`${frontendURL}/?token=${token}`)
 }
 
 /**
