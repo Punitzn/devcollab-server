@@ -27,59 +27,41 @@ export const getSnippets = async (req, res) => {
     const limit = Math.min(50, parseInt(req.query.limit) || 20)
     const skip  = (page - 1) * limit
 
-    // ─── Match stage ─────────────────────────────────────────────────────────────
-    const match = {}
-    if (language)  match.language = language
-    if (tag)       match.tags = tag
-    if (search)    match.title = { $regex: search, $options: 'i' }
+    // ─── Filter ───────────────────────────────────────────────────────────────────
+    const filter = {}
+    if (language) filter.language = language
+    if (tag)      filter.tags = tag
+    if (search)   filter.title = { $regex: search, $options: 'i' }
 
-    // ─── Aggregation pipeline ─────────────────────────────────────────────────────
-    // Sort by net votes (upvotes - downvotes) inside MongoDB — avoids JS sort
-    const snippets = await Snippet.aggregate([
-      { $match: match },
-      {
-        $addFields: {
-          netVotes: {
-            $subtract: [
-              { $size: { $ifNull: ['$upvotes',   []] } },
-              { $size: { $ifNull: ['$downvotes', []] } },
-            ],
-          },
-        },
-      },
-      { $sort: { netVotes: -1, createdAt: -1 } },
-      { $skip: skip },
-      { $limit: limit },
-      // Populate author — only the fields the UI needs
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'author',
-          foreignField: '_id',
-          pipeline: [{ $project: { username: 1, avatar: 1, reputation: 1 } }],
-          as: 'author',
-        },
-      },
-      { $unwind: { path: '$author', preserveNullAndEmpty: true } },
-      // Drop the heavy comments array from the list view — only needed in detail
-      { $project: { comments: 0 } },
+    // Run the paginated query and total count in parallel
+    const [snippets, total] = await Promise.all([
+      Snippet.find(filter)
+        .populate('author', 'username avatar reputation')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),                 // plain JS objects — 2-5x faster than Mongoose docs
+      Snippet.countDocuments(filter),
     ])
+
+    // Sort by net votes within this page (only up to 20 items — negligible cost)
+    snippets.sort((a, b) => {
+      const scoreA = (a.upvotes?.length || 0) - (a.downvotes?.length || 0)
+      const scoreB = (b.upvotes?.length || 0) - (b.downvotes?.length || 0)
+      return scoreB - scoreA
+    })
 
     // Attach cached AI review for logged-in user (one query for all snippets)
     if (req.user && snippets.length > 0) {
-      const snippetIds = snippets.map((s) => s._id)
-      const aiReviews  = await AiReview.find({
+      const aiReviews = await AiReview.find({
         user:    req.user._id,
-        snippet: { $in: snippetIds },
+        snippet: { $in: snippets.map((s) => s._id) },
       }).lean()
       const reviewMap = new Map(aiReviews.map((r) => [r.snippet.toString(), r]))
       snippets.forEach((s) => {
         s.aiReview = reviewMap.get(s._id.toString()) || null
       })
     }
-
-    // Total count for the client to know if there are more pages
-    const total = await Snippet.countDocuments(match)
 
     res.json({ snippets, page, limit, total, totalPages: Math.ceil(total / limit) })
   } catch (err) {
