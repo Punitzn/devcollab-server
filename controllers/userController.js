@@ -104,3 +104,25 @@ export const updateProfile = async (req, res) => {
     return res.status(500).json({ message: err.message })
   }
 }
+
+/**
+ * GET /api/users
+ * Search users by username.
+ */
+export const searchUsers = async (req, res) => {
+  try {
+    const { query } = req.query
+    if (!query) return res.json([])
+
+    const users = await User.find({
+      username: { $regex: query, $options: 'i' },
+    })
+      .select('username avatar reputation')
+      .limit(10)
+      .lean()
+
+    return res.json(users)
+  } catch (err) {
+    return res.status(500).json({ message: err.message })
+  }
+}

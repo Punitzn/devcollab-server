@@ -1,8 +1,15 @@
 import express from 'express'
-import { getProfile, updateProfile } from '../controllers/userController.js'
+import {
+  getProfile,
+  updateProfile,
+  searchUsers,
+} from '../controllers/userController.js'
 import protect from '../middleware/auth.js'
 
 const router = express.Router()
+
+// GET /api/users — search users by username
+router.get('/', searchUsers)
 
 // GET /api/users/:id — public profile
 router.get('/:id', getProfile)
