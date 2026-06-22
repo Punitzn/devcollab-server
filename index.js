@@ -13,6 +13,7 @@ connectDB()
 app.use(cors({ origin: process.env.CLIENT_URL }))
 app.use(express.json())
 
+
 app.use('/api/auth', authRoutes)
 app.use('/api/snippets', snippetRoutes)
 
