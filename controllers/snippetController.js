@@ -21,43 +21,67 @@ export const createSnippet = async (req, res) => {
 export const getSnippets = async (req, res) => {
   try {
     const { language, tag, search } = req.query
-    const filter = {}
-    if (language) filter.language = language
-    if (tag) filter.tags = tag
-    if (search) filter.title = { $regex: search, $options: 'i' }
 
-    const snippets = await Snippet.find(filter)
-      .populate('author', 'username avatar reputation')
-      .sort({ createdAt: -1 })
+    // ─── Pagination ───────────────────────────────────────────────────────────────
+    const page  = Math.max(1, parseInt(req.query.page)  || 1)
+    const limit = Math.min(50, parseInt(req.query.limit) || 20)
+    const skip  = (page - 1) * limit
 
-    let snippetsWithReview = snippets
-    if (req.user) {
-      const aiReviews = await AiReview.find({
-        user: req.user._id,
-        snippet: { $in: snippets.map((s) => s._id) },
-      })
+    // ─── Match stage ─────────────────────────────────────────────────────────────
+    const match = {}
+    if (language)  match.language = language
+    if (tag)       match.tags = tag
+    if (search)    match.title = { $regex: search, $options: 'i' }
+
+    // ─── Aggregation pipeline ─────────────────────────────────────────────────────
+    // Sort by net votes (upvotes - downvotes) inside MongoDB — avoids JS sort
+    const snippets = await Snippet.aggregate([
+      { $match: match },
+      {
+        $addFields: {
+          netVotes: {
+            $subtract: [
+              { $size: { $ifNull: ['$upvotes',   []] } },
+              { $size: { $ifNull: ['$downvotes', []] } },
+            ],
+          },
+        },
+      },
+      { $sort: { netVotes: -1, createdAt: -1 } },
+      { $skip: skip },
+      { $limit: limit },
+      // Populate author — only the fields the UI needs
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'author',
+          foreignField: '_id',
+          pipeline: [{ $project: { username: 1, avatar: 1, reputation: 1 } }],
+          as: 'author',
+        },
+      },
+      { $unwind: { path: '$author', preserveNullAndEmpty: true } },
+      // Drop the heavy comments array from the list view — only needed in detail
+      { $project: { comments: 0 } },
+    ])
+
+    // Attach cached AI review for logged-in user (one query for all snippets)
+    if (req.user && snippets.length > 0) {
+      const snippetIds = snippets.map((s) => s._id)
+      const aiReviews  = await AiReview.find({
+        user:    req.user._id,
+        snippet: { $in: snippetIds },
+      }).lean()
       const reviewMap = new Map(aiReviews.map((r) => [r.snippet.toString(), r]))
-      snippetsWithReview = snippets.map((s) => {
-        const obj = s.toObject()
-        obj.aiReview = reviewMap.get(s._id.toString()) || null
-        return obj
-      })
-    } else {
-      snippetsWithReview = snippets.map((s) => {
-        const obj = s.toObject()
-        delete obj.aiReview
-        return obj
+      snippets.forEach((s) => {
+        s.aiReview = reviewMap.get(s._id.toString()) || null
       })
     }
 
-    // Sort by net votes (upvotes - downvotes), highest first
-    snippetsWithReview.sort((a, b) => {
-      const scoreA = (a.upvotes?.length || 0) - (a.downvotes?.length || 0)
-      const scoreB = (b.upvotes?.length || 0) - (b.downvotes?.length || 0)
-      return scoreB - scoreA
-    })
+    // Total count for the client to know if there are more pages
+    const total = await Snippet.countDocuments(match)
 
-    res.json(snippetsWithReview)
+    res.json({ snippets, page, limit, total, totalPages: Math.ceil(total / limit) })
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
@@ -65,24 +89,25 @@ export const getSnippets = async (req, res) => {
 
 export const getSnippetById = async (req, res) => {
   try {
+    // .lean() + manual populate kept separate because we need the full doc
     const snippet = await Snippet.findById(req.params.id)
       .populate('author', 'username avatar reputation')
       .populate('comments.user', 'username avatar')
+      .lean()
 
     if (!snippet) return res.status(404).json({ message: 'Snippet not found' })
 
-    const obj = snippet.toObject()
     if (req.user) {
       const aiReview = await AiReview.findOne({
-        user: req.user._id,
+        user:    req.user._id,
         snippet: snippet._id,
-      })
-      obj.aiReview = aiReview || null
+      }).lean()
+      snippet.aiReview = aiReview || null
     } else {
-      delete obj.aiReview
+      delete snippet.aiReview
     }
 
-    res.json(obj)
+    res.json(snippet)
   } catch (err) {
     res.status(500).json({ message: err.message })
   }

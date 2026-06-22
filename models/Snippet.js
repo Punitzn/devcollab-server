@@ -35,4 +35,14 @@ const snippetSchema = new mongoose.Schema(
   { timestamps: true }
 )
 
+// ─── Indexes ─────────────────────────────────────────────────────────────────
+// Speeds up the most common queries on the home feed
+snippetSchema.index({ language: 1 })          // filter by language
+snippetSchema.index({ tags: 1 })              // filter by tag
+snippetSchema.index({ title: 'text' })        // full-text search on title
+snippetSchema.index({ author: 1 })            // profile page — snippets by user
+snippetSchema.index({ createdAt: -1 })        // default sort (newest first)
+// Compound: language filter + recency sort (common combined query)
+snippetSchema.index({ language: 1, createdAt: -1 })
+
 export default mongoose.model('Snippet', snippetSchema)

@@ -23,5 +23,7 @@ const aiReviewSchema = new mongoose.Schema(
 
 // Ensure a user can only have one AI review per snippet
 aiReviewSchema.index({ user: 1, snippet: 1 }, { unique: true })
+// Speeds up bulk lookup in getSnippets: find all reviews for a set of snippet IDs
+aiReviewSchema.index({ snippet: 1 })
 
 export default mongoose.model('AiReview', aiReviewSchema)

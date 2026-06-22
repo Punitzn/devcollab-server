@@ -7,17 +7,16 @@ import Snippet from '../models/Snippet.js'
  */
 export const getProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select(
-      '-password -provider -providerId'
-    )
+    const user = await User.findById(req.params.id)
+      .select('-password -provider -providerId')
+      .lean()
     if (!user) return res.status(404).json({ message: 'User not found' })
 
     // Fetch all public snippets by this user
     const snippets = await Snippet.find({ author: user._id })
       .sort({ createdAt: -1 })
-      .select(
-        'title description language tags upvotes downvotes comments createdAt'
-      )
+      .select('title description language tags upvotes downvotes comments createdAt')
+      .lean()
 
     return res.json({ user, snippets })
   } catch (err) {
