@@ -21,6 +21,12 @@ const snippetSchema = new mongoose.Schema(
     description: { type: String, default: '' },
     code: { type: String, required: true },
     language: { type: String, required: true },
+    codeVersions: [
+      {
+        language: { type: String, required: true },
+        code: { type: String, required: true },
+      },
+    ],
     author: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

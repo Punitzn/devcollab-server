@@ -16,12 +16,27 @@ import {
 
 export const createSnippet = async (req, res) => {
   try {
-    const { title, description, code, language, tags } = req.body
+    const { title, description, code, language, tags, codeVersions } = req.body
+
+    // Initialize codeVersions if not provided
+    let finalCodeVersions = codeVersions
+    if (
+      !finalCodeVersions ||
+      !Array.isArray(finalCodeVersions) ||
+      finalCodeVersions.length === 0
+    ) {
+      finalCodeVersions = [{ language, code }]
+    }
+
+    const finalLanguage = language || finalCodeVersions[0].language
+    const finalCode = code || finalCodeVersions[0].code
+
     const snippet = await Snippet.create({
       title,
       description,
-      code,
-      language,
+      code: finalCode,
+      language: finalLanguage,
+      codeVersions: finalCodeVersions,
       tags,
       author: req.user._id,
     })
@@ -194,7 +209,7 @@ export const deleteSnippet = async (req, res) => {
 
 export const updateSnippet = async (req, res) => {
   try {
-    const { title, description, code, language, tags } = req.body
+    const { title, description, code, language, tags, codeVersions } = req.body
     const snippet = await Snippet.findById(req.params.id)
     if (!snippet) return res.status(404).json({ message: 'Snippet not found' })
 
@@ -202,9 +217,32 @@ export const updateSnippet = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized' })
 
     snippet.title = title !== undefined ? title : snippet.title
-    snippet.description = description !== undefined ? description : snippet.description
-    snippet.code = code !== undefined ? code : snippet.code
-    snippet.language = language !== undefined ? language : snippet.language
+    snippet.description =
+      description !== undefined ? description : snippet.description
+
+    if (
+      codeVersions !== undefined &&
+      Array.isArray(codeVersions) &&
+      codeVersions.length > 0
+    ) {
+      snippet.codeVersions = codeVersions
+      snippet.code = codeVersions[0].code
+      snippet.language = codeVersions[0].language
+    } else {
+      if (code !== undefined) snippet.code = code
+      if (language !== undefined) snippet.language = language
+
+      // Keep codeVersions[0] in sync if it exists, otherwise initialize it
+      if (snippet.codeVersions && snippet.codeVersions.length > 0) {
+        if (code !== undefined) snippet.codeVersions[0].code = code
+        if (language !== undefined) snippet.codeVersions[0].language = language
+      } else {
+        snippet.codeVersions = [
+          { language: snippet.language, code: snippet.code },
+        ]
+      }
+    }
+
     snippet.tags = tags !== undefined ? tags : snippet.tags
 
     await snippet.save()
