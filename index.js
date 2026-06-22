@@ -11,6 +11,7 @@ import snippetRoutes from './routes/snippetRoutes.js'
 import userRoutes from './routes/userRoutes.js'
 
 const app = express()
+app.set('trust proxy', 1)
 
 // Connect to MongoDB
 connectDB()
