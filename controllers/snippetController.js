@@ -189,6 +189,40 @@ export const deleteSnippet = async (req, res) => {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// UPDATE
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const updateSnippet = async (req, res) => {
+  try {
+    const { title, description, code, language, tags } = req.body
+    const snippet = await Snippet.findById(req.params.id)
+    if (!snippet) return res.status(404).json({ message: 'Snippet not found' })
+
+    if (snippet.author.toString() !== req.user._id.toString())
+      return res.status(403).json({ message: 'Not authorized' })
+
+    snippet.title = title !== undefined ? title : snippet.title
+    snippet.description = description !== undefined ? description : snippet.description
+    snippet.code = code !== undefined ? code : snippet.code
+    snippet.language = language !== undefined ? language : snippet.language
+    snippet.tags = tags !== undefined ? tags : snippet.tags
+
+    await snippet.save()
+
+    // Invalidate detail + every list page + author's profile cache pages
+    await Promise.all([
+      cacheDel(detailKey(req.params.id)),
+      cacheDelPattern('snip:list:*'),
+      cacheDelPattern(`user:profile:${req.user._id}:*`),
+    ])
+
+    res.json(snippet)
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // COMMENTS
 // ─────────────────────────────────────────────────────────────────────────────
 

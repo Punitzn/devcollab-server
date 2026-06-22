@@ -4,6 +4,7 @@ import {
   getSnippets,
   getSnippetById,
   deleteSnippet,
+  updateSnippet,
   addComment,
   upvoteComment,
   downvoteComment,
@@ -18,6 +19,7 @@ const router = express.Router()
 router.get('/', optionalProtect, getSnippets)
 router.get('/:id', optionalProtect, getSnippetById)
 router.post('/', protect, createSnippet)
+router.put('/:id', protect, updateSnippet)
 router.delete('/:id', protect, deleteSnippet)
 router.post('/:id/comments', protect, addComment)
 router.patch('/:id/comments/:commentId/upvote', protect, upvoteComment)
