@@ -2,6 +2,7 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
+import compression from 'compression'
 import { Server } from 'socket.io'
 import connectDB from './config/db.js'
 import './config/passport.js' // Initialize passport strategies
@@ -13,6 +14,9 @@ import notificationRoutes from './routes/notificationRoutes.js'
 
 const app = express()
 app.set('trust proxy', 1)
+
+// Compress response payloads
+app.use(compression())
 
 // Connect to MongoDB
 connectDB()
