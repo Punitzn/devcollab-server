@@ -287,7 +287,19 @@ export const addComment = async (req, res) => {
       'comments.user',
       'username avatar'
     )
+
+    // Broadcast the newest comment to all other viewers of this snippet in real-time
+    const newComment = updated.comments[updated.comments.length - 1]
+    const io = req.app.get('io')
+    if (io) {
+      io.to(req.params.id).emit('review:new', {
+        snippetId: req.params.id,
+        comment: newComment,
+      })
+    }
+
     res.status(201).json(updated.comments)
+
   } catch (err) {
     res.status(500).json({ message: err.message })
   }

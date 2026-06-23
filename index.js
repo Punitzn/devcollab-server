@@ -59,9 +59,35 @@ const io = new Server(server, {
   },
 })
 
+// Make `io` accessible inside Express controllers via req.app.get('io')
+app.set('io', io)
+
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.id)
-  socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id)
+  // ── Join the room for a specific snippet ───────────────────────────────────
+  socket.on('review:join', (snippetId) => {
+    socket.join(snippetId)
   })
+
+  // ── Leave the room for a specific snippet ──────────────────────────────────
+  socket.on('review:leave', (snippetId) => {
+    socket.leave(snippetId)
+  })
+
+  // ── User started typing a review ───────────────────────────────────────────
+  // Relay to everyone else in the room (not the sender)
+  socket.on('review:typing', ({ snippetId, username }) => {
+    if (!snippetId || !username) return
+    socket.to(snippetId).emit('review:typing', { username, snippetId })
+  })
+
+  // ── User stopped typing (submitted, cleared, or went idle) ─────────────────
+  socket.on('review:stop', ({ snippetId, username }) => {
+    if (!snippetId || !username) return
+    socket.to(snippetId).emit('review:stop', { username, snippetId })
+  })
+
+  // ── On disconnect, nothing extra needed ────────────────────────────────────
+  // Socket.IO automatically removes the socket from all rooms on disconnect,
+  // so viewers will stop receiving events from this socket.
 })
+
