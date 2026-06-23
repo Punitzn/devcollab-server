@@ -3,6 +3,7 @@ import {
   getProfile,
   updateProfile,
   searchUsers,
+  getActivityHeatmap,
 } from '../controllers/userController.js'
 import protect from '../middleware/auth.js'
 
@@ -13,6 +14,9 @@ router.get('/', searchUsers)
 
 // GET /api/users/:id — public profile
 router.get('/:id', getProfile)
+
+// GET /api/users/:id/heatmap — activity heatmap (public)
+router.get('/:id/heatmap', getActivityHeatmap)
 
 // PUT /api/users/profile — update own profile (protected)
 router.put('/profile', protect, updateProfile)

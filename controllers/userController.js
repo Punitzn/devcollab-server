@@ -1,8 +1,10 @@
+import mongoose from 'mongoose'
 import User from '../models/User.js'
 import Snippet from '../models/Snippet.js'
 import {
   TTL,
   profileKey,
+  heatmapKey,
   cacheGet,
   cacheSet,
   cacheDel,
@@ -55,6 +57,60 @@ export const getProfile = async (req, res) => {
     await cacheSet(key, payload, TTL.USER_PROFILE)
 
     return res.json(payload)
+  } catch (err) {
+    return res.status(500).json({ message: err.message })
+  }
+}
+
+/**
+ * GET /api/users/:id/heatmap
+ * Returns a flat activity map { "YYYY-MM-DD": count } for the past 365 days.
+ * Counts: snippets posted + comments left by this user.
+ */
+export const getActivityHeatmap = async (req, res) => {
+  try {
+    const { id } = req.params
+    const key = heatmapKey(id)
+    const cached = await cacheGet(key)
+    if (cached) return res.json(cached)
+
+    const since = new Date()
+    since.setDate(since.getDate() - 364) // 365 days inclusive of today
+    since.setHours(0, 0, 0, 0)
+
+    // 1. Snippets posted by this user in the window
+    const snippetDates = await Snippet.find(
+      { author: id, createdAt: { $gte: since } },
+      { createdAt: 1 }
+    ).lean()
+
+    // 2. Comments left by this user across any snippet in the window
+    const commentDocs = await Snippet.aggregate([
+      { $unwind: '$comments' },
+      {
+        $match: {
+          'comments.user': new mongoose.Types.ObjectId(id),
+          'comments.createdAt': { $gte: since },
+        },
+      },
+      { $project: { _id: 0, createdAt: '$comments.createdAt' } },
+    ])
+
+    // Helper: normalise a Date to "YYYY-MM-DD" in local ISO format
+    const toDay = (d) => new Date(d).toISOString().slice(0, 10)
+
+    const map = {}
+    for (const s of snippetDates) {
+      const day = toDay(s.createdAt)
+      map[day] = (map[day] || 0) + 1
+    }
+    for (const c of commentDocs) {
+      const day = toDay(c.createdAt)
+      map[day] = (map[day] || 0) + 1
+    }
+
+    await cacheSet(key, map, TTL.HEATMAP)
+    return res.json(map)
   } catch (err) {
     return res.status(500).json({ message: err.message })
   }

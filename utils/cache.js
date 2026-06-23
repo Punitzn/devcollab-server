@@ -5,6 +5,7 @@ export const TTL = {
   SNIPPET_LIST: 60, // 1 min  — changes on new posts / deletes
   SNIPPET_DETAIL: 120, // 2 min  — changes on comment / vote
   USER_PROFILE: 300, // 5 min  — profiles change rarely
+  HEATMAP: 300, // 5 min  — activity heatmap per user
 }
 
 // ─── Key builders ────────────────────────────────────────────────────────────
@@ -22,6 +23,9 @@ export const detailKey = (id) => `snip:detail:${id}`
 /** User profile key */
 export const profileKey = (id, page = 1, limit = 10) =>
   `user:profile:${id}:p${page}:l${limit}`
+
+/** Activity heatmap key */
+export const heatmapKey = (id) => `user:heatmap:${id}`
 
 // ─── Core helpers ────────────────────────────────────────────────────────────
 
