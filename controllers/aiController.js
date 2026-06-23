@@ -7,21 +7,15 @@ import { sendNotification } from '../utils/notify.js'
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash'
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini'
 
-/**
- * Helper to extract and parse the first valid JSON object from a string.
- * Handles markdown code blocks, leading/trailing explanations, and brace mismatches.
- */
 const extractJSON = (str) => {
   const trimmed = str.trim()
   
-  // 1. Try parsing the whole string first
   try {
     return JSON.parse(trimmed)
   } catch (e) {
     // ignore and continue
   }
 
-  // 2. Clean markdown code blocks if present
   let cleaned = trimmed
   if (cleaned.startsWith('```')) {
     cleaned = cleaned.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/, '').trim()
@@ -32,7 +26,6 @@ const extractJSON = (str) => {
     }
   }
 
-  // 3. Find first '{' and match with corresponding '}' by counting braces
   const startIdx = cleaned.indexOf('{')
   if (startIdx !== -1) {
     let braceCount = 0
@@ -53,25 +46,18 @@ const extractJSON = (str) => {
     }
   }
 
-  // 4. Fallback to greedy regex matching if brace counting didn't succeed
   const match = cleaned.match(/\{[\s\S]*\}/)
   if (match) {
     try {
       return JSON.parse(match[0])
     } catch (e) {
-      // ignore and throw below
+      // ignore and continue
     }
   }
 
   throw new Error('AI returned invalid response format')
 }
 
-/**
- * POST /api/snippets/:id/ai-review
- * Sends the snippet code to Gemini (or GPT-4) and gets back a structured code review.
- * Stores the result in snippet.aiReview and returns it.
- * Rate-limited: won't re-generate if review already exists (unless ?force=true).
- */
 export const generateAiReview = async (req, res) => {
   try {
     const snippet = await Snippet.findById(req.params.id).populate(
@@ -82,13 +68,11 @@ export const generateAiReview = async (req, res) => {
       return res.status(404).json({ message: 'Snippet not found' })
     }
 
-    // Find existing AI review for this user and snippet
     const existingReview = await AiReview.findOne({
       user: req.user._id,
       snippet: snippet._id,
     })
 
-    // Return cached review unless force refresh requested
     if (existingReview?.generatedAt && req.query.force !== 'true') {
       return res.json({ aiReview: existingReview, cached: true })
     }
@@ -103,7 +87,6 @@ export const generateAiReview = async (req, res) => {
       })
     }
 
-    // Structured prompt — forces the AI to return valid JSON
     const systemPrompt = `You are an expert code reviewer. Analyze the provided code and return ONLY a JSON object (no markdown, no extra text) with this exact structure:
 {
   "summary": "2-3 sentence overview of what the code does and its overall quality",
@@ -161,10 +144,8 @@ ${snippet.code}
       raw = completion.choices[0]?.message?.content?.trim()
     }
 
-    // Parse the JSON response using the robust extractJSON helper
     const review = extractJSON(raw)
 
-    // Save review to the AiReview document per user and snippet
     let aiReview = await AiReview.findOne({
       user: req.user._id,
       snippet: snippet._id,
@@ -187,7 +168,6 @@ ${snippet.code}
 
     await aiReview.save()
 
-    // Send notification for AI review completion
     await sendNotification(req.app.get('io'), {
       recipient: req.user._id,
       actor: req.user._id,

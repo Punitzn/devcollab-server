@@ -15,10 +15,10 @@ const notificationSchema = new mongoose.Schema(
     type: {
       type: String,
       enum: [
-        'snippet_upvote',    // someone upvoted your snippet
-        'snippet_comment',   // someone commented on your snippet
-        'comment_upvote',    // someone upvoted your comment
-        'ai_review_complete', // AI review finished for your snippet
+        'snippet_upvote',
+        'snippet_comment',
+        'comment_upvote',
+        'ai_review_complete',
       ],
       required: true,
     },
@@ -27,7 +27,6 @@ const notificationSchema = new mongoose.Schema(
       ref: 'Snippet',
       default: null,
     },
-    // Extra context (e.g. snippet title stored at creation time so it survives deletion)
     meta: {
       snippetTitle: { type: String, default: '' },
     },
@@ -39,9 +38,7 @@ const notificationSchema = new mongoose.Schema(
   { timestamps: true }
 )
 
-// Fast lookup: "give me all unread notifications for user X"
 notificationSchema.index({ recipient: 1, read: 1 })
-// Fast lookup: "give me notifications for user X sorted by newest"
 notificationSchema.index({ recipient: 1, createdAt: -1 })
 
 export default mongoose.model('Notification', notificationSchema)

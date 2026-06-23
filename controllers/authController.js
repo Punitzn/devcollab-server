@@ -1,33 +1,19 @@
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-/**
- * Generate a JWT token for a given user ID.
- */
 const generateToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' })
 
-/**
- * Set JWT in a secure HTTP-only cookie on the response.
- * httpOnly   → JS cannot read it (XSS protection)
- * secure     → only sent over HTTPS in production
- * sameSite   → CSRF protection
- */
 const setTokenCookie = (res, token) => {
   const isProduction = process.env.NODE_ENV === 'production'
   res.cookie('token', token, {
     httpOnly: true,
     secure: isProduction,
     sameSite: isProduction ? 'none' : 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   })
 }
 
-/**
- * Shape the user object returned to the frontend (never send password).
- */
 const formatUser = (user) => ({
   _id: user._id,
   username: user.username,
@@ -37,16 +23,9 @@ const formatUser = (user) => ({
   reputation: user.reputation,
   provider: user.provider,
   isProfileComplete: user.isProfileComplete,
-  // IDs only — full data is fetched separately on the Bookmarks tab
   bookmarks: (user.bookmarks || []).map((b) => b.toString()),
 })
 
-// ─── Local Auth ──────────────────────────────────────────────────────────────
-
-/**
- * POST /api/auth/register
- * Creates a new local account, sets JWT cookie, returns user data.
- */
 export const register = async (req, res) => {
   try {
     const { username, email, password } = req.body
@@ -83,10 +62,6 @@ export const register = async (req, res) => {
   }
 }
 
-/**
- * POST /api/auth/login
- * Authenticates a local user OR an OAuth user who has set a password.
- */
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body
@@ -102,7 +77,6 @@ export const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' })
     }
 
-    // OAuth user who hasn't set a password yet
     if (!user.password) {
       return res.status(401).json({
         message: `This account was created via ${user.provider}. Please set a password in your profile settings first, or use ${user.provider} to sign in.`,
@@ -124,10 +98,6 @@ export const login = async (req, res) => {
   }
 }
 
-/**
- * POST /api/auth/logout
- * Clears the JWT cookie.
- */
 export const logout = (req, res) => {
   res.clearCookie('token', {
     httpOnly: true,
@@ -137,27 +107,13 @@ export const logout = (req, res) => {
   return res.json({ message: 'Logged out successfully' })
 }
 
-/**
- * GET /api/auth/me
- * Returns the currently authenticated user (read from cookie by protect middleware).
- */
 export const getMe = async (req, res) => {
   return res.json({ user: formatUser(req.user) })
 }
 
-// ─── OAuth Callbacks ─────────────────────────────────────────────────────────
-
-/**
- * Shared OAuth success handler — called after Passport strategy succeeds.
- * GET /api/auth/google/callback  →  passport.authenticate  →  oauthCallback
- * GET /api/auth/github/callback  →  passport.authenticate  →  oauthCallback
- *
- * Sets JWT cookie then redirects browser to frontend.
- */
 export const oauthCallback = (req, res) => {
   const user = req.user
   const token = generateToken(user._id)
-  // Don't set cookie — pass token in redirect URL
   const frontendURL = (
     process.env.FRONTEND_URL || 'http://localhost:5173'
   ).replace(/\/+$/, '')
@@ -168,10 +124,6 @@ export const oauthCallback = (req, res) => {
   return res.redirect(`${frontendURL}/?token=${token}`)
 }
 
-/**
- * GET /api/auth/oauth-error
- * Redirected here when OAuth fails (e.g. GitHub private email).
- */
 export const oauthError = (req, res) => {
   const frontendURL = (
     process.env.FRONTEND_URL || 'http://localhost:5173'
@@ -182,13 +134,6 @@ export const oauthError = (req, res) => {
   )
 }
 
-// ─── OAuth Profile Completion ─────────────────────────────────────────────────
-
-/**
- * POST /api/auth/complete-profile
- * OAuth users must call this to set their username before using the app.
- * Optionally also sets a password so they can later login with email+password.
- */
 export const completeProfile = async (req, res) => {
   try {
     const { username, password } = req.body
@@ -197,7 +142,6 @@ export const completeProfile = async (req, res) => {
       return res.status(400).json({ message: 'Username is required' })
     }
 
-    // Check username is not taken
     const existing = await User.findOne({ username })
     if (existing && existing._id.toString() !== req.user._id.toString()) {
       return res.status(400).json({ message: 'Username already taken' })
@@ -206,14 +150,13 @@ export const completeProfile = async (req, res) => {
     req.user.username = username
     req.user.isProfileComplete = true
 
-    // Optionally set password for future email+password login
     if (password) {
       if (password.length < 6) {
         return res
           .status(400)
           .json({ message: 'Password must be at least 6 characters' })
       }
-      req.user.password = password // pre-save hook will hash it
+      req.user.password = password
     }
 
     await req.user.save()
@@ -225,11 +168,6 @@ export const completeProfile = async (req, res) => {
   }
 }
 
-/**
- * PUT /api/auth/set-password
- * Allows an OAuth user to set (or change) their password so they can
- * log in with email+password in the future.
- */
 export const setPassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body
@@ -240,7 +178,6 @@ export const setPassword = async (req, res) => {
         .json({ message: 'New password must be at least 6 characters' })
     }
 
-    // If user already has a password, verify the current one
     if (req.user.password) {
       if (!currentPassword) {
         return res.status(400).json({ message: 'Current password is required' })
@@ -253,7 +190,7 @@ export const setPassword = async (req, res) => {
       }
     }
 
-    req.user.password = newPassword // pre-save hook hashes it
+    req.user.password = newPassword
     await req.user.save()
 
     return res.json({ message: 'Password updated successfully' })

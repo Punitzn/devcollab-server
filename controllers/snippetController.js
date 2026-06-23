@@ -12,15 +12,10 @@ import {
   cacheDelPattern,
 } from '../utils/cache.js'
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CREATE
-// ─────────────────────────────────────────────────────────────────────────────
-
 export const createSnippet = async (req, res) => {
   try {
     const { title, description, code, language, tags, codeVersions } = req.body
 
-    // Initialize codeVersions if not provided
     let finalCodeVersions = codeVersions
     if (
       !finalCodeVersions ||
@@ -43,10 +38,8 @@ export const createSnippet = async (req, res) => {
       author: req.user._id,
     })
 
-    // Reputation: +5 for posting a snippet
     await User.findByIdAndUpdate(req.user._id, { $inc: { reputation: 5 } })
 
-    // A new snippet invalidates every list page (sort order changes) and the author's profile cache pages
     await Promise.all([
       cacheDelPattern('snip:list:*'),
       cacheDelPattern(`user:profile:${req.user._id}:*`),
@@ -58,29 +51,22 @@ export const createSnippet = async (req, res) => {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LIST  (GET /api/snippets)
-// ─────────────────────────────────────────────────────────────────────────────
-
 export const getSnippets = async (req, res) => {
   try {
     const { language, tag, search } = req.query
 
-    // ─── Pagination ───────────────────────────────────────────────────────────
     const page = Math.max(1, parseInt(req.query.page) || 1)
     const limit = Math.min(50, parseInt(req.query.limit) || 20)
     const skip = (page - 1) * limit
 
-    // ─── Redis cache (user-agnostic — AI reviews are attached separately) ─────
     const key = listKey({ page, limit, language, tag, search })
     const cached = await cacheGet(key)
 
-    let basePayload // { snippets, page, limit, total, totalPages }
+    let basePayload
 
     if (cached) {
       basePayload = cached
     } else {
-      // ─── DB fetch ────────────────────────────────────────────────────────────
       const filter = {}
       if (language) filter.language = language
       if (tag) filter.tags = tag
@@ -96,7 +82,6 @@ export const getSnippets = async (req, res) => {
         Snippet.countDocuments(filter),
       ])
 
-      // Sort by net votes within this page (≤20 items — negligible)
       snippets.sort((a, b) => {
         const scoreA = (a.upvotes?.length || 0) - (a.downvotes?.length || 0)
         const scoreB = (b.upvotes?.length || 0) - (b.downvotes?.length || 0)
@@ -111,12 +96,9 @@ export const getSnippets = async (req, res) => {
         totalPages: Math.ceil(total / limit),
       }
 
-      // Cache the base payload (no user-specific AI review data)
       await cacheSet(key, basePayload, TTL.SNIPPET_LIST)
     }
 
-    // ─── Layer in AI reviews for logged-in user (indexed, fast) ───────────────
-    // Deep-clone so we don't mutate the in-memory cached object
     const snippets = basePayload.snippets.map((s) => ({ ...s }))
 
     if (req.user && snippets.length > 0) {
@@ -135,10 +117,6 @@ export const getSnippets = async (req, res) => {
     res.status(500).json({ message: err.message })
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DETAIL  (GET /api/snippets/:id)
-// ─────────────────────────────────────────────────────────────────────────────
 
 export const getSnippetById = async (req, res) => {
   try {
@@ -163,7 +141,6 @@ export const getSnippetById = async (req, res) => {
 
     if (!snippet) return res.status(404).json({ message: 'Snippet not found' })
 
-    // AI review is user-specific — always fetch fresh, never cache it on the doc
     const result = { ...snippet }
     if (req.user) {
       result.aiReview =
@@ -181,10 +158,6 @@ export const getSnippetById = async (req, res) => {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DELETE
-// ─────────────────────────────────────────────────────────────────────────────
-
 export const deleteSnippet = async (req, res) => {
   try {
     const snippet = await Snippet.findById(req.params.id)
@@ -195,7 +168,6 @@ export const deleteSnippet = async (req, res) => {
 
     await snippet.deleteOne()
 
-    // Invalidate detail + every list page + author's profile cache pages
     await Promise.all([
       cacheDel(detailKey(req.params.id)),
       cacheDelPattern('snip:list:*'),
@@ -207,10 +179,6 @@ export const deleteSnippet = async (req, res) => {
     res.status(500).json({ message: err.message })
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// UPDATE
-// ─────────────────────────────────────────────────────────────────────────────
 
 export const updateSnippet = async (req, res) => {
   try {
@@ -237,7 +205,6 @@ export const updateSnippet = async (req, res) => {
       if (code !== undefined) snippet.code = code
       if (language !== undefined) snippet.language = language
 
-      // Keep codeVersions[0] in sync if it exists, otherwise initialize it
       if (snippet.codeVersions && snippet.codeVersions.length > 0) {
         if (code !== undefined) snippet.codeVersions[0].code = code
         if (language !== undefined) snippet.codeVersions[0].language = language
@@ -252,7 +219,6 @@ export const updateSnippet = async (req, res) => {
 
     await snippet.save()
 
-    // Invalidate detail + every list page + author's profile cache pages
     await Promise.all([
       cacheDel(detailKey(req.params.id)),
       cacheDelPattern('snip:list:*'),
@@ -264,10 +230,6 @@ export const updateSnippet = async (req, res) => {
     res.status(500).json({ message: err.message })
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// COMMENTS
-// ─────────────────────────────────────────────────────────────────────────────
 
 export const addComment = async (req, res) => {
   try {
@@ -282,7 +244,6 @@ export const addComment = async (req, res) => {
     })
     await snippet.save()
 
-    // New comment changes the detail view and the snippet author's profile cache pages
     await Promise.all([
       cacheDel(detailKey(req.params.id)),
       cacheDelPattern(`user:profile:${snippet.author}:*`),
@@ -293,7 +254,6 @@ export const addComment = async (req, res) => {
       'username avatar'
     )
 
-    // Broadcast the newest comment to all other viewers of this snippet in real-time
     const newComment = updated.comments[updated.comments.length - 1]
     const io = req.app.get('io')
     if (io) {
@@ -303,10 +263,8 @@ export const addComment = async (req, res) => {
       })
     }
 
-    // Reputation: +1 for posting a comment
     await User.findByIdAndUpdate(req.user._id, { $inc: { reputation: 1 } })
 
-    // Notification → snippet author
     await sendNotification(io, {
       recipient: snippet.author,
       actor: req.user._id,
@@ -334,22 +292,20 @@ export const upvoteComment = async (req, res) => {
     let repDelta = 0
     if (comment.upvotes.includes(userId)) {
       comment.upvotes.pull(userId)
-      repDelta = -2  // removing an upvote
+      repDelta = -2
     } else {
       comment.upvotes.push(userId)
       comment.downvotes.pull(userId)
-      repDelta = 2   // giving an upvote
+      repDelta = 2
     }
 
     await snippet.save()
     await Promise.all([
       cacheDel(detailKey(req.params.id)),
       cacheDelPattern(`user:profile:${snippet.author}:*`),
-      // Reputation: adjust comment author's score
       User.findByIdAndUpdate(comment.user, { $inc: { reputation: repDelta } }),
     ])
 
-    // Notification → comment author (only when giving an upvote)
     if (repDelta > 0) {
       const io = req.app.get('io')
       await sendNotification(io, {
@@ -379,11 +335,11 @@ export const downvoteComment = async (req, res) => {
     let repDelta = 0
     if (comment.downvotes.includes(userId)) {
       comment.downvotes.pull(userId)
-      repDelta = 1   // removing a downvote
+      repDelta = 1
     } else {
       comment.downvotes.push(userId)
       comment.upvotes.pull(userId)
-      repDelta = -1  // giving a downvote
+      repDelta = -1
     }
 
     await snippet.save()
@@ -398,14 +354,6 @@ export const downvoteComment = async (req, res) => {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SNIPPET VOTING
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * PATCH /api/snippets/:id/upvote
- * Toggle upvote on the snippet itself (not a comment).
- */
 export const upvoteSnippet = async (req, res) => {
   try {
     const snippet = await Snippet.findById(req.params.id)
@@ -415,16 +363,15 @@ export const upvoteSnippet = async (req, res) => {
     let repDelta = 0
     if (snippet.upvotes.some((id) => id.equals(userId))) {
       snippet.upvotes.pull(userId)
-      repDelta = -2  // removing an upvote
+      repDelta = -2
     } else {
       snippet.upvotes.push(userId)
       snippet.downvotes.pull(userId)
-      repDelta = 2   // giving an upvote
+      repDelta = 2
     }
 
     await snippet.save()
 
-    // Vote changes the detail doc, may re-order lists, and changes author profile info (votes)
     const io = req.app.get('io')
     await Promise.all([
       cacheDel(detailKey(req.params.id)),
@@ -433,7 +380,6 @@ export const upvoteSnippet = async (req, res) => {
       User.findByIdAndUpdate(snippet.author, { $inc: { reputation: repDelta } }),
     ])
 
-    // Notification → snippet author (only when giving an upvote)
     if (repDelta > 0) {
       await sendNotification(io, {
         recipient: snippet.author,
@@ -450,10 +396,6 @@ export const upvoteSnippet = async (req, res) => {
   }
 }
 
-/**
- * PATCH /api/snippets/:id/downvote
- * Toggle downvote on the snippet itself.
- */
 export const downvoteSnippet = async (req, res) => {
   try {
     const snippet = await Snippet.findById(req.params.id)
@@ -463,11 +405,11 @@ export const downvoteSnippet = async (req, res) => {
     let repDelta = 0
     if (snippet.downvotes.some((id) => id.equals(userId))) {
       snippet.downvotes.pull(userId)
-      repDelta = 1   // removing a downvote
+      repDelta = 1
     } else {
       snippet.downvotes.push(userId)
       snippet.upvotes.pull(userId)
-      repDelta = -1  // giving a downvote
+      repDelta = -1
     }
 
     await snippet.save()

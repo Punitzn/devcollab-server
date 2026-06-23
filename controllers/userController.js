@@ -7,14 +7,9 @@ import {
   heatmapKey,
   cacheGet,
   cacheSet,
-  cacheDel,
   cacheDelPattern,
 } from '../utils/cache.js'
 
-/**
- * GET /api/users/:id
- * Returns a user's public profile + their snippets (paginated).
- */
 export const getProfile = async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1)
@@ -32,7 +27,6 @@ export const getProfile = async (req, res) => {
       .lean()
     if (!user) return res.status(404).json({ message: 'User not found' })
 
-    // Fetch paginated public snippets by this user
     const [snippets, total] = await Promise.all([
       Snippet.find({ author: user._id })
         .sort({ createdAt: -1 })
@@ -62,11 +56,6 @@ export const getProfile = async (req, res) => {
   }
 }
 
-/**
- * GET /api/users/:id/heatmap
- * Returns a flat activity map { "YYYY-MM-DD": count } for the past 365 days.
- * Counts: snippets posted + comments left by this user.
- */
 export const getActivityHeatmap = async (req, res) => {
   try {
     const { id } = req.params
@@ -75,16 +64,14 @@ export const getActivityHeatmap = async (req, res) => {
     if (cached) return res.json(cached)
 
     const since = new Date()
-    since.setDate(since.getDate() - 364) // 365 days inclusive of today
+    since.setDate(since.getDate() - 364)
     since.setHours(0, 0, 0, 0)
 
-    // 1. Snippets posted by this user in the window
     const snippetDates = await Snippet.find(
       { author: id, createdAt: { $gte: since } },
       { createdAt: 1 }
     ).lean()
 
-    // 2. Comments left by this user across any snippet in the window
     const commentDocs = await Snippet.aggregate([
       { $unwind: '$comments' },
       {
@@ -96,7 +83,6 @@ export const getActivityHeatmap = async (req, res) => {
       { $project: { _id: 0, createdAt: '$comments.createdAt' } },
     ])
 
-    // Helper: normalise a Date to "YYYY-MM-DD" in local ISO format
     const toDay = (d) => new Date(d).toISOString().slice(0, 10)
 
     const map = {}
@@ -116,11 +102,6 @@ export const getActivityHeatmap = async (req, res) => {
   }
 }
 
-/**
- * PUT /api/users/profile
- * Allows the authenticated user to update their own profile.
- * Fields: username, bio, avatar
- */
 export const updateProfile = async (req, res) => {
   try {
     const { username, bio, avatar } = req.body
@@ -138,7 +119,6 @@ export const updateProfile = async (req, res) => {
 
     await req.user.save()
 
-    // Invalidate all paginated user profile cache pages and all snippet lists (since user avatar/username changes)
     await Promise.all([
       cacheDelPattern(`user:profile:${req.user._id}:*`),
       cacheDelPattern('snip:list:*'),
@@ -162,10 +142,6 @@ export const updateProfile = async (req, res) => {
   }
 }
 
-/**
- * GET /api/users
- * Search users by username.
- */
 export const searchUsers = async (req, res) => {
   try {
     const { query } = req.query
@@ -184,10 +160,6 @@ export const searchUsers = async (req, res) => {
   }
 }
 
-/**
- * POST /api/users/bookmarks/:snippetId
- * Toggles bookmark status of a snippet.
- */
 export const toggleBookmark = async (req, res) => {
   try {
     const { snippetId } = req.params
@@ -220,10 +192,6 @@ export const toggleBookmark = async (req, res) => {
   }
 }
 
-/**
- * GET /api/users/bookmarks
- * Returns all snippets bookmarked by the logged-in user.
- */
 export const getBookmarks = async (req, res) => {
   try {
     const user = await User.findById(req.user._id)

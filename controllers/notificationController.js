@@ -1,9 +1,5 @@
 import Notification from '../models/Notification.js'
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/notifications
-// Returns the latest 30 notifications for the logged-in user.
-// ─────────────────────────────────────────────────────────────────────────────
 export const getNotifications = async (req, res) => {
   try {
     const notifications = await Notification.find({ recipient: req.user._id })
@@ -24,10 +20,6 @@ export const getNotifications = async (req, res) => {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PATCH /api/notifications/read-all
-// Marks every notification for the user as read.
-// ─────────────────────────────────────────────────────────────────────────────
 export const markAllRead = async (req, res) => {
   try {
     await Notification.updateMany(
@@ -40,10 +32,6 @@ export const markAllRead = async (req, res) => {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PATCH /api/notifications/:id/read
-// Marks a single notification as read.
-// ─────────────────────────────────────────────────────────────────────────────
 export const markOneRead = async (req, res) => {
   try {
     const notif = await Notification.findOne({

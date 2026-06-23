@@ -25,11 +25,9 @@ router.post('/:id/comments', protect, addComment)
 router.patch('/:id/comments/:commentId/upvote', protect, upvoteComment)
 router.patch('/:id/comments/:commentId/downvote', protect, downvoteComment)
 
-// Snippet-level voting
 router.patch('/:id/upvote', protect, upvoteSnippet)
 router.patch('/:id/downvote', protect, downvoteSnippet)
 
-// AI code review
 router.post('/:id/ai-review', protect, generateAiReview)
 
 export default router

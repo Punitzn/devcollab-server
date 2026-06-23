@@ -29,18 +29,14 @@ const handleOAuthFailure = (provider) => (req, res, next) => {
   })(req, res, next)
 }
 
-// ─── Local Auth ──────────────────────────────────────────────────────────────
 router.post('/register', register)
 router.post('/login', login)
 router.post('/logout', logout)
 router.get('/me', protect, getMe)
 
-// ─── Profile Completion (OAuth users must set username) ──────────────────────
 router.post('/complete-profile', protect, completeProfile)
 router.put('/set-password', protect, setPassword)
 
-// ─── Google OAuth ─────────────────────────────────────────────────────────────
-// Step 1: redirect user to Google's consent screen
 router.get(
   '/google',
   passport.authenticate('google', {
@@ -49,11 +45,8 @@ router.get(
   })
 )
 
-// Step 2: Google redirects back here with code
 router.get('/google/callback', handleOAuthFailure('google'), oauthCallback)
 
-// ─── GitHub OAuth ─────────────────────────────────────────────────────────────
-// Step 1: redirect user to GitHub's consent screen
 router.get(
   '/github',
   passport.authenticate('github', {
@@ -62,10 +55,8 @@ router.get(
   })
 )
 
-// Step 2: GitHub redirects back here
 router.get('/github/callback', handleOAuthFailure('github'), oauthCallback)
 
-// ─── OAuth Error ──────────────────────────────────────────────────────────────
 router.get('/oauth-error', oauthError)
 
 export default router
