@@ -38,7 +38,8 @@ export const markOneRead = async (req, res) => {
       _id: req.params.id,
       recipient: req.user._id,
     })
-    if (!notif) return res.status(404).json({ message: 'Notification not found' })
+    if (!notif)
+      return res.status(404).json({ message: 'Notification not found' })
 
     notif.read = true
     await notif.save()

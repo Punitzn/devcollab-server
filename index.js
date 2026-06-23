@@ -77,5 +77,3 @@ io.on('connection', (socket) => {
     socket.to(snippetId).emit('review:stop', { username, snippetId })
   })
 })
-
-

@@ -274,7 +274,6 @@ export const addComment = async (req, res) => {
     })
 
     res.status(201).json(updated.comments)
-
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
@@ -377,7 +376,9 @@ export const upvoteSnippet = async (req, res) => {
       cacheDel(detailKey(req.params.id)),
       cacheDelPattern('snip:list:*'),
       cacheDelPattern(`user:profile:${snippet.author}:*`),
-      User.findByIdAndUpdate(snippet.author, { $inc: { reputation: repDelta } }),
+      User.findByIdAndUpdate(snippet.author, {
+        $inc: { reputation: repDelta },
+      }),
     ])
 
     if (repDelta > 0) {
@@ -418,7 +419,9 @@ export const downvoteSnippet = async (req, res) => {
       cacheDel(detailKey(req.params.id)),
       cacheDelPattern('snip:list:*'),
       cacheDelPattern(`user:profile:${snippet.author}:*`),
-      User.findByIdAndUpdate(snippet.author, { $inc: { reputation: repDelta } }),
+      User.findByIdAndUpdate(snippet.author, {
+        $inc: { reputation: repDelta },
+      }),
     ])
 
     res.json({ upvotes: snippet.upvotes, downvotes: snippet.downvotes })

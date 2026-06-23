@@ -32,6 +32,7 @@
 ## ✨ Features
 
 ### 🔐 Authentication & Users
+
 - **Local Auth** — Email + password registration and login with bcrypt hashing.
 - **OAuth 2.0 (Google & GitHub)** — Sign in via Google or GitHub using passport strategies.
 - **JWT sessions** — Secure stateless user sessions using HTTP-only cookies.
@@ -40,12 +41,14 @@
 - **Activity Heatmap** — Flat activity profile detailing commits/contributions over the past 365 days.
 
 ### 📝 Snippets & Collaboration
+
 - **Multi-Version Snippets** — Support for posting and managing a snippet in multiple programming languages.
 - **Interactive Review Presence** — Real-time typing indicators and live comment delivery via Socket.IO.
 - **Private Notifications** — Real-time user notification channel for comments, upvotes, and completed AI reviews.
 - **Bookmarks** — Bookmark and organize snippets inside the user's dashboard.
 
 ### 🤖 AI Reviews
+
 - **Gemini 2.0 / 3.5 Flash** (Primary) — Generates formatted JSON reviews with bug lists and suggestion cards.
 - **OpenAI GPT-4o-mini** (Fallback) — Seamlessly fails over to OpenAI if Gemini is unconfigured.
 - **Cache Layer** — Saves reviews in MongoDB to prevent duplicate provider charges.
@@ -56,12 +59,12 @@
 
 The client-server integration is designed for peak speed, accessibility, best practices, and SEO:
 
-| Metric | Score | Status |
-| :--- | :---: | :--- |
-| **Performance** | `99` | 🚀 Lightning Fast Page Loads |
-| **Accessibility** | `95` | ♿ WCAG AA Compliant |
-| **Best Practices** | `100` | ✅ Flawless Architecture |
-| **SEO** | `100` | 🔍 Fully Crawlable & Optimized |
+| Metric             | Score | Status                         |
+| :----------------- | :---: | :----------------------------- |
+| **Performance**    | `99`  | 🚀 Lightning Fast Page Loads   |
+| **Accessibility**  | `95`  | ♿ WCAG AA Compliant           |
+| **Best Practices** | `100` | ✅ Flawless Architecture       |
+| **SEO**            | `100` | 🔍 Fully Crawlable & Optimized |
 
 ---
 
@@ -69,12 +72,12 @@ The client-server integration is designed for peak speed, accessibility, best pr
 
 To ensure high performance and low server latency under load, the following optimizations were applied:
 
-* **Backend Response Compression**: Configured early-stage `compression` middleware to zip all HTTP response payloads (HTML, CSS, JSON) before sending to client browsers.
-* **Smart Hybrid Caching (Redis)**: Implemented Redis list and detail caching. User-agnostic data (like raw snippet info) is cached globally, while user-specific details (like AI review ratings) are joined dynamically in-memory on request.
-* **Redis SCAN cursor iteration**: Replaced slow and blocking Redis `KEYS *` operations with non-blocking cursor-based `SCAN` operations (batch size of 100) for safe cache invalidation in production.
-* **Parallel Database Queries**: Leveraged `Promise.all` in snippet and profile controllers to execute independent MongoDB calls concurrently, cutting database request resolution times in half.
-* **Database Index Optimization**: Added compound indexes for common queries (e.g. `{ language: 1, createdAt: -1 }` for filtered list feeds and `{ user: 1, snippet: 1 }` for AI reviews) to minimize full-collection scans.
-* **Robust JSON Extraction**: Created a resilient brace-matching state parser to recover and parse valid JSON from malformed, markdown-wrapped, or text-prefixed LLM response strings.
+- **Backend Response Compression**: Configured early-stage `compression` middleware to zip all HTTP response payloads (HTML, CSS, JSON) before sending to client browsers.
+- **Smart Hybrid Caching (Redis)**: Implemented Redis list and detail caching. User-agnostic data (like raw snippet info) is cached globally, while user-specific details (like AI review ratings) are joined dynamically in-memory on request.
+- **Redis SCAN cursor iteration**: Replaced slow and blocking Redis `KEYS *` operations with non-blocking cursor-based `SCAN` operations (batch size of 100) for safe cache invalidation in production.
+- **Parallel Database Queries**: Leveraged `Promise.all` in snippet and profile controllers to execute independent MongoDB calls concurrently, cutting database request resolution times in half.
+- **Database Index Optimization**: Added compound indexes for common queries (e.g. `{ language: 1, createdAt: -1 }` for filtered list feeds and `{ user: 1, snippet: 1 }` for AI reviews) to minimize full-collection scans.
+- **Robust JSON Extraction**: Created a resilient brace-matching state parser to recover and parse valid JSON from malformed, markdown-wrapped, or text-prefixed LLM response strings.
 
 ---
 
@@ -186,6 +189,7 @@ devcollab-server/
 ## 🚀 Getting Started
 
 ### Prerequisites
+
 - **Node.js** v18 or higher
 - **npm** v8 or higher
 - A **MongoDB** URI
@@ -248,28 +252,30 @@ OPENAI_MODEL=gpt-4o-mini
 All endpoints are prefixed with `/api`. Authenticated sessions are tracked via **HTTP-only JWT cookies**.
 
 ### Auth — `/api/auth`
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `POST` | `/register` | ❌ | Create new email/password account |
-| `POST` | `/login` | ❌ | Login; sets cookie |
-| `POST` | `/logout` | ❌ | Clears auth cookie |
-| `GET` | `/me` | ✅ | Returns authenticated session info |
-| `POST` | `/complete-profile`| ✅ | Complete onboarding username setup |
-| `PUT` | `/set-password` | ✅ | Configure password for OAuth users |
-| `GET` | `/google` | ❌ | Google OAuth entry path |
-| `GET` | `/github` | ❌ | GitHub OAuth entry path |
+
+| Method | Endpoint            | Auth | Description                        |
+| ------ | ------------------- | ---- | ---------------------------------- |
+| `POST` | `/register`         | ❌   | Create new email/password account  |
+| `POST` | `/login`            | ❌   | Login; sets cookie                 |
+| `POST` | `/logout`           | ❌   | Clears auth cookie                 |
+| `GET`  | `/me`               | ✅   | Returns authenticated session info |
+| `POST` | `/complete-profile` | ✅   | Complete onboarding username setup |
+| `PUT`  | `/set-password`     | ✅   | Configure password for OAuth users |
+| `GET`  | `/google`           | ❌   | Google OAuth entry path            |
+| `GET`  | `/github`           | ❌   | GitHub OAuth entry path            |
 
 ### Snippets — `/api/snippets`
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `GET` | `/` | Optional | Fetch feed; supports `?language=`, `?tag=`, `?search=` |
-| `GET` | `/:id` | Optional | Get snippet with comments and AI reviews |
-| `POST` | `/` | ✅ | Create new snippet |
-| `DELETE` | `/:id` | ✅ Author | Delete a snippet |
-| `POST` | `/:id/comments` | ✅ | Leave a comment |
-| `PATCH` | `/:id/upvote` | ✅ | Vote snippet up |
-| `PATCH` | `/:id/downvote` | ✅ | Vote snippet down |
-| `POST` | `/:id/ai-review` | ✅ | Retrieve or generate code reviews |
+
+| Method   | Endpoint         | Auth      | Description                                            |
+| -------- | ---------------- | --------- | ------------------------------------------------------ |
+| `GET`    | `/`              | Optional  | Fetch feed; supports `?language=`, `?tag=`, `?search=` |
+| `GET`    | `/:id`           | Optional  | Get snippet with comments and AI reviews               |
+| `POST`   | `/`              | ✅        | Create new snippet                                     |
+| `DELETE` | `/:id`           | ✅ Author | Delete a snippet                                       |
+| `POST`   | `/:id/comments`  | ✅        | Leave a comment                                        |
+| `PATCH`  | `/:id/upvote`    | ✅        | Vote snippet up                                        |
+| `PATCH`  | `/:id/downvote`  | ✅        | Vote snippet down                                      |
+| `POST`   | `/:id/ai-review` | ✅        | Retrieve or generate code reviews                      |
 
 ---
 
@@ -285,6 +291,7 @@ All endpoints are prefixed with `/api`. Authenticated sessions are tracked via *
 ## 🌐 Deployment
 
 Deploy to rendering hosts like Render, Railway, or Fly.io:
+
 1. Create a Web Service pointing to this repository.
 2. Configure environment variables in dashboard settings.
 3. Update callback urls in your OAuth client consoles.

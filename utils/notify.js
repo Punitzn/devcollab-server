@@ -4,7 +4,11 @@ export async function sendNotification(
   io,
   { recipient, actor, type, snippetId = null, snippetTitle = '' }
 ) {
-  if (type !== 'ai_review_complete' && recipient.toString() === actor.toString()) return
+  if (
+    type !== 'ai_review_complete' &&
+    recipient.toString() === actor.toString()
+  )
+    return
 
   try {
     const notif = await Notification.create({

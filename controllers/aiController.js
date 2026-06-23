@@ -9,7 +9,7 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini'
 
 const extractJSON = (str) => {
   const trimmed = str.trim()
-  
+
   try {
     return JSON.parse(trimmed)
   } catch (e) {
@@ -18,7 +18,10 @@ const extractJSON = (str) => {
 
   let cleaned = trimmed
   if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/, '').trim()
+    cleaned = cleaned
+      .replace(/^```(?:json)?\n?/i, '')
+      .replace(/\n?```$/, '')
+      .trim()
     try {
       return JSON.parse(cleaned)
     } catch (e) {
@@ -107,28 +110,83 @@ ${snippet.code}
     if (useGemini) {
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
       const prompt = `${systemPrompt}\n\n${userPrompt}`
+      const model = genAI.getGenerativeModel({
+        model: GEMINI_MODEL,
+        generationConfig: { responseMimeType: 'application/json' },
+      })
 
-      try {
-        const model = genAI.getGenerativeModel({
-          model: GEMINI_MODEL,
-          generationConfig: { responseMimeType: 'application/json' },
-        })
-        const result = await model.generateContent(prompt)
-        const response = await result.response
-        raw = response.text().trim()
-      } catch (geminiError) {
-        if (
-          geminiError.status === 429 ||
-          (geminiError.message && geminiError.message.includes('429'))
-        ) {
-          console.warn('Gemini 2.0 Flash rate limited.')
-          return res.status(429).json({
-            message:
-              'AI service is currently rate-limited. Please try again in a few moments.',
-          })
-        } else {
-          throw geminiError
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      let lastError
+
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const result = await Promise.race([
+            model.generateContent(prompt),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Gemini timeout')), 15000)
+            ),
+          ])
+          const response = await result.response
+          raw = response.text().trim()
+          lastError = null
+          break
+        } catch (error) {
+          lastError = error
+
+          const status =
+            error?.status ||
+            error?.response?.status ||
+            error?.code ||
+            (error?.message && error.message.includes('503') ? 503 : null) ||
+            (error?.message && error.message.includes('429') ? 429 : null)
+
+          if ((status === 429 || status === 503) && attempt < 2) {
+            const delay = 1000 * Math.pow(2, attempt)
+            console.warn(
+              `Gemini request failed (${status || error.message}). Retrying in ${delay}ms...`
+            )
+            await sleep(delay)
+            continue
+          }
+
+          break
         }
+      }
+
+      if (lastError) {
+        const status =
+          lastError?.status ||
+          lastError?.response?.status ||
+          (lastError?.message && lastError.message.includes('503')
+            ? 503
+            : null) ||
+          (lastError?.message && lastError.message.includes('429') ? 429 : null)
+
+        if (status === 429) {
+          return res.status(429).json({
+            success: false,
+            message:
+              'AI reviewer is receiving too many requests right now. Please try again in a minute.',
+          })
+        }
+
+        if (status === 503) {
+          return res.status(503).json({
+            success: false,
+            message:
+              'AI reviewer is temporarily busy. Please try again in a few moments.',
+          })
+        }
+
+        if (lastError.message === 'Gemini timeout') {
+          return res.status(504).json({
+            success: false,
+            message:
+              'AI review timed out. The service may be under heavy load. Please try again in a few moments.',
+          })
+        }
+
+        throw lastError
       }
     } else {
       const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
