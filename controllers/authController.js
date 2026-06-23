@@ -37,6 +37,8 @@ const formatUser = (user) => ({
   reputation: user.reputation,
   provider: user.provider,
   isProfileComplete: user.isProfileComplete,
+  // IDs only — full data is fetched separately on the Bookmarks tab
+  bookmarks: (user.bookmarks || []).map((b) => b.toString()),
 })
 
 // ─── Local Auth ──────────────────────────────────────────────────────────────

@@ -154,6 +154,7 @@ export const updateProfile = async (req, res) => {
         reputation: req.user.reputation,
         provider: req.user.provider,
         isProfileComplete: req.user.isProfileComplete,
+        bookmarks: req.user.bookmarks || [],
       },
     })
   } catch (err) {
@@ -178,6 +179,66 @@ export const searchUsers = async (req, res) => {
       .lean()
 
     return res.json(users)
+  } catch (err) {
+    return res.status(500).json({ message: err.message })
+  }
+}
+
+/**
+ * POST /api/users/bookmarks/:snippetId
+ * Toggles bookmark status of a snippet.
+ */
+export const toggleBookmark = async (req, res) => {
+  try {
+    const { snippetId } = req.params
+    if (!mongoose.Types.ObjectId.isValid(snippetId)) {
+      return res.status(400).json({ message: 'Invalid snippet ID' })
+    }
+
+    const snippetExists = await Snippet.exists({ _id: snippetId })
+    if (!snippetExists) {
+      return res.status(404).json({ message: 'Snippet not found' })
+    }
+
+    const user = await User.findById(req.user._id)
+    const index = user.bookmarks.indexOf(snippetId)
+
+    if (index > -1) {
+      user.bookmarks.splice(index, 1)
+    } else {
+      user.bookmarks.push(snippetId)
+    }
+
+    await user.save()
+
+    return res.json({
+      message: index > -1 ? 'Bookmark removed' : 'Bookmark added',
+      bookmarks: user.bookmarks,
+    })
+  } catch (err) {
+    return res.status(500).json({ message: err.message })
+  }
+}
+
+/**
+ * GET /api/users/bookmarks
+ * Returns all snippets bookmarked by the logged-in user.
+ */
+export const getBookmarks = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id)
+      .populate({
+        path: 'bookmarks',
+        populate: {
+          path: 'author',
+          select: 'username avatar reputation',
+        },
+      })
+      .lean()
+
+    if (!user) return res.status(404).json({ message: 'User not found' })
+
+    return res.json(user.bookmarks || [])
   } catch (err) {
     return res.status(500).json({ message: err.message })
   }

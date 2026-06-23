@@ -48,6 +48,13 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Bookmarked snippets — stored as IDs only; populated on demand
+    bookmarks: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Snippet',
+      },
+    ],
   },
   { timestamps: true }
 )

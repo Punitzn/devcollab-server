@@ -9,6 +9,7 @@ import passport from 'passport'
 import authRoutes from './routes/authRoutes.js'
 import snippetRoutes from './routes/snippetRoutes.js'
 import userRoutes from './routes/userRoutes.js'
+import notificationRoutes from './routes/notificationRoutes.js'
 
 const app = express()
 app.set('trust proxy', 1)
@@ -41,6 +42,7 @@ app.use(passport.initialize())
 app.use('/api/auth', authRoutes)
 app.use('/api/snippets', snippetRoutes)
 app.use('/api/users', userRoutes)
+app.use('/api/notifications', notificationRoutes)
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -63,6 +65,12 @@ const io = new Server(server, {
 app.set('io', io)
 
 io.on('connection', (socket) => {
+  // ── Each logged-in user joins their own private room ────────────────────────
+  // This enables real-time notification delivery to a specific user.
+  socket.on('user:join', (userId) => {
+    if (userId) socket.join(userId)
+  })
+
   // ── Join the room for a specific snippet ───────────────────────────────────
   socket.on('review:join', (snippetId) => {
     socket.join(snippetId)

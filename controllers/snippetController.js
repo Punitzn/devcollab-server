@@ -1,5 +1,7 @@
 import Snippet from '../models/Snippet.js'
 import AiReview from '../models/AiReview.js'
+import User from '../models/User.js'
+import { sendNotification } from '../utils/notify.js'
 import {
   TTL,
   listKey,
@@ -40,6 +42,9 @@ export const createSnippet = async (req, res) => {
       tags,
       author: req.user._id,
     })
+
+    // Reputation: +5 for posting a snippet
+    await User.findByIdAndUpdate(req.user._id, { $inc: { reputation: 5 } })
 
     // A new snippet invalidates every list page (sort order changes) and the author's profile cache pages
     await Promise.all([
@@ -298,6 +303,18 @@ export const addComment = async (req, res) => {
       })
     }
 
+    // Reputation: +1 for posting a comment
+    await User.findByIdAndUpdate(req.user._id, { $inc: { reputation: 1 } })
+
+    // Notification → snippet author
+    await sendNotification(io, {
+      recipient: snippet.author,
+      actor: req.user._id,
+      type: 'snippet_comment',
+      snippetId: snippet._id,
+      snippetTitle: snippet.title,
+    })
+
     res.status(201).json(updated.comments)
 
   } catch (err) {
@@ -314,18 +331,36 @@ export const upvoteComment = async (req, res) => {
     if (!comment) return res.status(404).json({ message: 'Comment not found' })
 
     const userId = req.user._id
+    let repDelta = 0
     if (comment.upvotes.includes(userId)) {
       comment.upvotes.pull(userId)
+      repDelta = -2  // removing an upvote
     } else {
       comment.upvotes.push(userId)
       comment.downvotes.pull(userId)
+      repDelta = 2   // giving an upvote
     }
 
     await snippet.save()
     await Promise.all([
       cacheDel(detailKey(req.params.id)),
       cacheDelPattern(`user:profile:${snippet.author}:*`),
+      // Reputation: adjust comment author's score
+      User.findByIdAndUpdate(comment.user, { $inc: { reputation: repDelta } }),
     ])
+
+    // Notification → comment author (only when giving an upvote)
+    if (repDelta > 0) {
+      const io = req.app.get('io')
+      await sendNotification(io, {
+        recipient: comment.user,
+        actor: req.user._id,
+        type: 'comment_upvote',
+        snippetId: snippet._id,
+        snippetTitle: snippet.title,
+      })
+    }
+
     res.json(comment)
   } catch (err) {
     res.status(500).json({ message: err.message })
@@ -341,17 +376,21 @@ export const downvoteComment = async (req, res) => {
     if (!comment) return res.status(404).json({ message: 'Comment not found' })
 
     const userId = req.user._id
+    let repDelta = 0
     if (comment.downvotes.includes(userId)) {
       comment.downvotes.pull(userId)
+      repDelta = 1   // removing a downvote
     } else {
       comment.downvotes.push(userId)
       comment.upvotes.pull(userId)
+      repDelta = -1  // giving a downvote
     }
 
     await snippet.save()
     await Promise.all([
       cacheDel(detailKey(req.params.id)),
       cacheDelPattern(`user:profile:${snippet.author}:*`),
+      User.findByIdAndUpdate(comment.user, { $inc: { reputation: repDelta } }),
     ])
     res.json(comment)
   } catch (err) {
@@ -373,21 +412,37 @@ export const upvoteSnippet = async (req, res) => {
     if (!snippet) return res.status(404).json({ message: 'Snippet not found' })
 
     const userId = req.user._id
+    let repDelta = 0
     if (snippet.upvotes.some((id) => id.equals(userId))) {
       snippet.upvotes.pull(userId)
+      repDelta = -2  // removing an upvote
     } else {
       snippet.upvotes.push(userId)
       snippet.downvotes.pull(userId)
+      repDelta = 2   // giving an upvote
     }
 
     await snippet.save()
 
     // Vote changes the detail doc, may re-order lists, and changes author profile info (votes)
+    const io = req.app.get('io')
     await Promise.all([
       cacheDel(detailKey(req.params.id)),
       cacheDelPattern('snip:list:*'),
       cacheDelPattern(`user:profile:${snippet.author}:*`),
+      User.findByIdAndUpdate(snippet.author, { $inc: { reputation: repDelta } }),
     ])
+
+    // Notification → snippet author (only when giving an upvote)
+    if (repDelta > 0) {
+      await sendNotification(io, {
+        recipient: snippet.author,
+        actor: req.user._id,
+        type: 'snippet_upvote',
+        snippetId: snippet._id,
+        snippetTitle: snippet.title,
+      })
+    }
 
     res.json({ upvotes: snippet.upvotes, downvotes: snippet.downvotes })
   } catch (err) {
@@ -405,11 +460,14 @@ export const downvoteSnippet = async (req, res) => {
     if (!snippet) return res.status(404).json({ message: 'Snippet not found' })
 
     const userId = req.user._id
+    let repDelta = 0
     if (snippet.downvotes.some((id) => id.equals(userId))) {
       snippet.downvotes.pull(userId)
+      repDelta = 1   // removing a downvote
     } else {
       snippet.downvotes.push(userId)
       snippet.upvotes.pull(userId)
+      repDelta = -1  // giving a downvote
     }
 
     await snippet.save()
@@ -418,6 +476,7 @@ export const downvoteSnippet = async (req, res) => {
       cacheDel(detailKey(req.params.id)),
       cacheDelPattern('snip:list:*'),
       cacheDelPattern(`user:profile:${snippet.author}:*`),
+      User.findByIdAndUpdate(snippet.author, { $inc: { reputation: repDelta } }),
     ])
 
     res.json({ upvotes: snippet.upvotes, downvotes: snippet.downvotes })

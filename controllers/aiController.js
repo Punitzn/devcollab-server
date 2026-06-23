@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import OpenAI from 'openai'
 import Snippet from '../models/Snippet.js'
 import AiReview from '../models/AiReview.js'
+import { sendNotification } from '../utils/notify.js'
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash'
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini'
@@ -137,6 +138,15 @@ ${snippet.code}
     aiReview.generatedAt = new Date()
 
     await aiReview.save()
+
+    // Send notification for AI review completion
+    await sendNotification(req.app.get('io'), {
+      recipient: req.user._id,
+      actor: req.user._id,
+      type: 'ai_review_complete',
+      snippetId: snippet._id,
+      snippetTitle: snippet.title,
+    })
 
     return res.json({ aiReview, cached: false })
   } catch (err) {
